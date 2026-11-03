@@ -16,7 +16,7 @@ type UI struct {
 	app       *tview.Application
 	rootPages *tview.Pages
 	tabPages  *tview.Pages
-	mgr       *core.Manager
+	backend   core.Backend
 	activeTab int // 0: Users, 1: Reality, 2: VLESS, 3: Status
 
 	// Top Navigation Buttons (Clickable)
@@ -55,7 +55,7 @@ type UI struct {
 	footerBar *tview.TextView
 }
 
-func NewUI(mgr *core.Manager) *UI {
+func NewUI(backend core.Backend) *UI {
 	app := tview.NewApplication()
 	app.EnableMouse(true) // Enable full terminal mouse interaction!
 
@@ -66,7 +66,7 @@ func NewUI(mgr *core.Manager) *UI {
 		app:       app,
 		rootPages: rootPages,
 		tabPages:  tabPages,
-		mgr:       mgr,
+		backend:   backend,
 		activeTab: 0,
 	}
 
@@ -105,7 +105,7 @@ func NewUI(mgr *core.Manager) *UI {
 
 	ui.setupGlobalKeyboard()
 
-	mgr.OnUpdate = func() {
+	backend.SetOnUpdate(func() {
 		app.QueueUpdateDraw(func() {
 			ui.renderSummary()
 			if ui.activeTab == 0 {
@@ -114,7 +114,7 @@ func NewUI(mgr *core.Manager) *UI {
 				ui.renderStatus()
 			}
 		})
-	}
+	})
 
 	return ui
 }
@@ -180,7 +180,7 @@ func (u *UI) setupUserTabView() {
 
 	// Action buttons in User tab (Clickable)
 	u.btnAdd = tview.NewButton("➕ 添加用户 (a)").SetSelectedFunc(func() {
-		ShowAddUserModal(u.rootPages, u.mgr, func() {
+		ShowAddUserModal(u.rootPages, u.backend, func() {
 			u.renderTable()
 			u.renderSummary()
 		})
@@ -189,9 +189,9 @@ func (u *UI) setupUserTabView() {
 
 	u.btnEdit = tview.NewButton("✏️ 修改选中 (e)").SetSelectedFunc(func() {
 		idx := u.getSelectedUserIndex()
-		cfg := u.mgr.GetConfig()
+		cfg := u.backend.GetConfig()
 		if idx >= 0 && idx < len(cfg.Users) {
-			ShowEditUserModal(u.rootPages, u.mgr, idx, func() {
+			ShowEditUserModal(u.rootPages, u.backend, idx, func() {
 				u.renderTable()
 				u.renderSummary()
 			})
@@ -207,9 +207,9 @@ func (u *UI) setupUserTabView() {
 
 	u.btnToggle = tview.NewButton("⚡ 启用/停用 (t)").SetSelectedFunc(func() {
 		idx := u.getSelectedUserIndex()
-		cfg := u.mgr.GetConfig()
+		cfg := u.backend.GetConfig()
 		if idx >= 0 && idx < len(cfg.Users) {
-			_ = u.mgr.ToggleUser(idx)
+			_ = u.backend.ToggleUser(idx)
 			u.renderTable()
 		}
 	})
@@ -259,7 +259,7 @@ func (u *UI) setupStatusTabView() {
 
 	u.btnRestart = tview.NewButton("🔄 重启代理内核 (R)").SetSelectedFunc(func() {
 		go func() {
-			_ = u.mgr.Restart()
+			_ = u.backend.Restart()
 			u.app.QueueUpdateDraw(func() {
 				u.renderSummary()
 				u.renderStatus()
@@ -271,10 +271,10 @@ func (u *UI) setupStatusTabView() {
 
 	u.btnStopStart = tview.NewButton("🛑 停止/启动服务").SetSelectedFunc(func() {
 		go func() {
-			if u.mgr.IsRunning() {
-				_ = u.mgr.Stop()
+			if u.backend.IsRunning() {
+				_ = u.backend.Stop()
 			} else {
-				_ = u.mgr.Start()
+				_ = u.backend.Start()
 			}
 			u.app.QueueUpdateDraw(func() {
 				u.renderSummary()
@@ -286,7 +286,7 @@ func (u *UI) setupStatusTabView() {
 
 	u.btnResetAll = tview.NewButton("🧹 清零所有用户流量").SetSelectedFunc(func() {
 		ShowConfirmModal(u.rootPages, "确认重置", "确定要将全站所有用户的累计流量清零吗？", func() {
-			_ = u.mgr.ResetAllTraffic()
+			_ = u.backend.ResetAllTraffic()
 			u.renderTable()
 			u.renderStatus()
 		})
@@ -371,7 +371,7 @@ func (u *UI) updateTabButtonStyles() {
 }
 
 func (u *UI) setupRealityForm() {
-	cfg := u.mgr.GetConfig()
+	cfg := u.backend.GetConfig()
 	form := tview.NewForm()
 	form.SetBorder(true).
 		SetTitle(" 🛡️ Reality 伪装与安全参数配置 ").
@@ -428,7 +428,7 @@ func (u *UI) setupRealityForm() {
 	})
 
 	form.AddButton("随机重新生成密钥对", func() {
-		newPriv, newPub, err := u.mgr.RegenerateRealityKeys()
+		newPriv, newPub, err := u.backend.RegenerateRealityKeys()
 		if err == nil {
 			privStr = newPriv
 			pubStr = newPub
@@ -462,7 +462,7 @@ func (u *UI) setupRealityForm() {
 			}
 		}
 
-		_ = u.mgr.UpdateReality(destStr, cleanSNIs, privStr, pubStr, cleanSIDs, spiderXStr)
+		_ = u.backend.UpdateReality(destStr, cleanSNIs, privStr, pubStr, cleanSIDs, spiderXStr)
 		ShowAlertModal(u.rootPages, "成功", "Reality 参数已保存并应用！")
 		u.renderSummary()
 	})
@@ -475,7 +475,7 @@ func (u *UI) setupRealityForm() {
 }
 
 func (u *UI) setupVlessForm() {
-	cfg := u.mgr.GetConfig()
+	cfg := u.backend.GetConfig()
 	form := tview.NewForm()
 	form.SetBorder(true).
 		SetTitle(" ⚙️ VLESS 服务与网络参数配置 ").
@@ -524,7 +524,7 @@ func (u *UI) setupVlessForm() {
 			ShowAlertModal(u.rootPages, "错误", "端口必须在 1 - 65535 之间")
 			return
 		}
-		_ = u.mgr.UpdateVLESS(port, listenStr, hostStr, fpStr)
+		_ = u.backend.UpdateVLESS(port, listenStr, hostStr, fpStr)
 		ShowAlertModal(u.rootPages, "成功", "VLESS 参数已保存并应用！")
 		u.renderSummary()
 	})
@@ -537,8 +537,8 @@ func (u *UI) setupVlessForm() {
 }
 
 func (u *UI) renderStatus() {
-	cfg := u.mgr.GetConfig()
-	running := u.mgr.IsRunning()
+	cfg := u.backend.GetConfig()
+	running := u.backend.IsRunning()
 
 	statusBadge := "[green]● 运行中 (RUNNING)[-]"
 	if !running {
@@ -547,7 +547,7 @@ func (u *UI) renderStatus() {
 
 	uptimeStr := "-"
 	if running {
-		uptime := time.Since(u.mgr.GetStartTime()).Truncate(time.Second)
+		uptime := time.Since(u.backend.GetStartTime()).Truncate(time.Second)
 		uptimeStr = uptime.String()
 	}
 
@@ -555,7 +555,7 @@ func (u *UI) renderStatus() {
 	for _, user := range cfg.Users {
 		totalUp += user.UpBytes
 		totalDown += user.DownBytes
-		st := u.mgr.GetUserStats(user.Email)
+		st := u.backend.GetUserStats(user.Email)
 		curSpeedUp += st.SpeedUp
 		curSpeedDown += st.SpeedDown
 	}
@@ -600,8 +600,8 @@ func (u *UI) renderStatus() {
 }
 
 func (u *UI) renderSummary() {
-	cfg := u.mgr.GetConfig()
-	running := u.mgr.IsRunning()
+	cfg := u.backend.GetConfig()
+	running := u.backend.IsRunning()
 
 	statusBadge := "[black:green:b] RUNNING [-:-:-]"
 	if !running {
@@ -610,7 +610,7 @@ func (u *UI) renderSummary() {
 
 	var totalSpeedUp, totalSpeedDown int64
 	for _, user := range cfg.Users {
-		stats := u.mgr.GetUserStats(user.Email)
+		stats := u.backend.GetUserStats(user.Email)
 		totalSpeedUp += stats.SpeedUp
 		totalSpeedDown += stats.SpeedDown
 	}
@@ -634,7 +634,7 @@ func (u *UI) renderFooter() {
 }
 
 func (u *UI) renderTable() {
-	cfg := u.mgr.GetConfig()
+	cfg := u.backend.GetConfig()
 	selectedRow, _ := u.table.GetSelection()
 
 	u.table.Clear()
@@ -652,7 +652,7 @@ func (u *UI) renderTable() {
 
 	for i, user := range cfg.Users {
 		row := i + 1
-		stats := u.mgr.GetUserStats(user.Email)
+		stats := u.backend.GetUserStats(user.Email)
 		statusStr, colorTag := UserStatusText(user)
 
 		totalBytes := user.UpBytes + user.DownBytes
@@ -723,14 +723,14 @@ func (u *UI) setupGlobalKeyboard() {
 					u.switchTab(3)
 					return nil
 				case 'a', 'A':
-					ShowAddUserModal(u.rootPages, u.mgr, func() {
+					ShowAddUserModal(u.rootPages, u.backend, func() {
 						u.renderTable()
 						u.renderSummary()
 					})
 					return nil
 				case 'e', 'E':
-					if userIndex >= 0 && userIndex < len(u.mgr.GetConfig().Users) {
-						ShowEditUserModal(u.rootPages, u.mgr, userIndex, func() {
+					if userIndex >= 0 && userIndex < len(u.backend.GetConfig().Users) {
+						ShowEditUserModal(u.rootPages, u.backend, userIndex, func() {
 							u.renderTable()
 							u.renderSummary()
 						})
@@ -743,8 +743,8 @@ func (u *UI) setupGlobalKeyboard() {
 					u.showSelectedQR(userIndex)
 					return nil
 				case 't', 'T':
-					if userIndex >= 0 && userIndex < len(u.mgr.GetConfig().Users) {
-						_ = u.mgr.ToggleUser(userIndex)
+					if userIndex >= 0 && userIndex < len(u.backend.GetConfig().Users) {
+						_ = u.backend.ToggleUser(userIndex)
 						u.renderTable()
 					}
 					return nil
@@ -776,7 +776,7 @@ func (u *UI) setupGlobalKeyboard() {
 					return nil
 				case 'R':
 					go func() {
-						_ = u.mgr.Restart()
+						_ = u.backend.Restart()
 						u.app.QueueUpdateDraw(func() {
 							u.renderSummary()
 							u.renderStatus()
@@ -795,15 +795,15 @@ func (u *UI) setupGlobalKeyboard() {
 }
 
 func (u *UI) showSelectedQR(userIndex int) {
-	cfg := u.mgr.GetConfig()
+	cfg := u.backend.GetConfig()
 	if userIndex >= 0 && userIndex < len(cfg.Users) {
 		user := cfg.Users[userIndex]
-		ShowQRCodeModal(u.rootPages, u.mgr, user)
+		ShowQRCodeModal(u.rootPages, u.backend, user)
 	}
 }
 
 func (u *UI) deleteSelectedUser(userIndex int) {
-	cfg := u.mgr.GetConfig()
+	cfg := u.backend.GetConfig()
 	if userIndex < 0 || userIndex >= len(cfg.Users) {
 		return
 	}
@@ -811,14 +811,14 @@ func (u *UI) deleteSelectedUser(userIndex int) {
 	ShowConfirmModal(u.rootPages, "确认删除",
 		fmt.Sprintf("确定要彻底删除用户 '%s' 吗？", user.Email),
 		func() {
-			_ = u.mgr.DeleteUser(userIndex)
+			_ = u.backend.DeleteUser(userIndex)
 			u.renderTable()
 			u.renderSummary()
 		})
 }
 
 func (u *UI) resetSelectedTraffic(userIndex int) {
-	cfg := u.mgr.GetConfig()
+	cfg := u.backend.GetConfig()
 	if userIndex < 0 || userIndex >= len(cfg.Users) {
 		return
 	}
@@ -826,7 +826,7 @@ func (u *UI) resetSelectedTraffic(userIndex int) {
 	ShowConfirmModal(u.rootPages, "重置流量",
 		fmt.Sprintf("确定要将用户 '%s' 的累计流量清零吗？", user.Email),
 		func() {
-			_ = u.mgr.ResetUserTraffic(userIndex)
+			_ = u.backend.ResetUserTraffic(userIndex)
 			u.renderTable()
 		})
 }

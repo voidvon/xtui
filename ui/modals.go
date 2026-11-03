@@ -25,7 +25,7 @@ func centerModal(p tview.Primitive, width, height int) tview.Primitive {
 }
 
 // ShowAddUserModal displays a form to add a new VLESS Reality user.
-func ShowAddUserModal(pages *tview.Pages, mgr *core.Manager, onDone func()) {
+func ShowAddUserModal(pages *tview.Pages, backend core.Backend, onDone func()) {
 	form := tview.NewForm()
 	form.SetBorder(true).
 		SetTitle(" ➕ 添加新用户 (Add User) ").
@@ -62,7 +62,7 @@ func ShowAddUserModal(pages *tview.Pages, mgr *core.Manager, onDone func()) {
 		limitGB, _ := strconv.ParseFloat(limitStr, 64)
 		validDays, _ := strconv.Atoi(daysStr)
 
-		_, err := mgr.AddUser(email, limitGB, validDays, customUUID, flow)
+		_, err := backend.AddUser(email, limitGB, validDays, customUUID, flow)
 		if err != nil {
 			ShowAlertModal(pages, "错误", err.Error())
 			return
@@ -81,8 +81,8 @@ func ShowAddUserModal(pages *tview.Pages, mgr *core.Manager, onDone func()) {
 }
 
 // ShowEditUserModal displays a form to modify an existing user.
-func ShowEditUserModal(pages *tview.Pages, mgr *core.Manager, userIndex int, onDone func()) {
-	cfg := mgr.GetConfig()
+func ShowEditUserModal(pages *tview.Pages, backend core.Backend, userIndex int, onDone func()) {
+	cfg := backend.GetConfig()
 	if userIndex < 0 || userIndex >= len(cfg.Users) {
 		return
 	}
@@ -143,7 +143,7 @@ func ShowEditUserModal(pages *tview.Pages, mgr *core.Manager, userIndex int, onD
 		newLimitGB, _ := strconv.ParseFloat(limitStr, 64)
 		newDays, _ := strconv.Atoi(daysStr)
 
-		err := mgr.EditUser(userIndex, email, uuidStr, flow, newLimitGB, newDays, enabled)
+		err := backend.EditUser(userIndex, email, uuidStr, flow, newLimitGB, newDays, enabled)
 		if err != nil {
 			ShowAlertModal(pages, "错误", err.Error())
 			return
@@ -162,8 +162,8 @@ func ShowEditUserModal(pages *tview.Pages, mgr *core.Manager, userIndex int, onD
 }
 
 // ShowRealityConfigModal allows viewing and configuring all Reality parameters.
-func ShowRealityConfigModal(pages *tview.Pages, mgr *core.Manager, onDone func()) {
-	cfg := mgr.GetConfig()
+func ShowRealityConfigModal(pages *tview.Pages, backend core.Backend, onDone func()) {
+	cfg := backend.GetConfig()
 
 	form := tview.NewForm()
 	form.SetBorder(true).
@@ -289,7 +289,7 @@ func ShowRealityConfigModal(pages *tview.Pages, mgr *core.Manager, onDone func()
 			cleanSIDs = []string{keys.GenerateShortId()}
 		}
 
-		_ = mgr.UpdateReality(destStr, cleanSNIs, privStr, pubStr, cleanSIDs, spiderXStr)
+		_ = backend.UpdateReality(destStr, cleanSNIs, privStr, pubStr, cleanSIDs, spiderXStr)
 		pages.RemovePage("modal")
 		if onDone != nil {
 			onDone()
@@ -304,8 +304,8 @@ func ShowRealityConfigModal(pages *tview.Pages, mgr *core.Manager, onDone func()
 }
 
 // ShowVlessConfigModal allows configuring VLESS port, IP, and fingerprint.
-func ShowVlessConfigModal(pages *tview.Pages, mgr *core.Manager, onDone func()) {
-	cfg := mgr.GetConfig()
+func ShowVlessConfigModal(pages *tview.Pages, backend core.Backend, onDone func()) {
+	cfg := backend.GetConfig()
 
 	form := tview.NewForm()
 	form.SetBorder(true).
@@ -364,7 +364,7 @@ func ShowVlessConfigModal(pages *tview.Pages, mgr *core.Manager, onDone func()) 
 			hostStr = "127.0.0.1"
 		}
 
-		_ = mgr.UpdateVLESS(port, listenStr, hostStr, fpStr)
+		_ = backend.UpdateVLESS(port, listenStr, hostStr, fpStr)
 		pages.RemovePage("modal")
 		if onDone != nil {
 			onDone()
@@ -379,14 +379,14 @@ func ShowVlessConfigModal(pages *tview.Pages, mgr *core.Manager, onDone func()) 
 }
 
 // ShowQRCodeModal displays the VLESS link, node details, and ASCII QR code.
-func ShowQRCodeModal(pages *tview.Pages, mgr *core.Manager, user *config.User) {
-	link := mgr.GenerateVlessLink(user)
-	qrAscii, err := mgr.GenerateQRCodeAscii(link)
+func ShowQRCodeModal(pages *tview.Pages, backend core.Backend, user *config.User) {
+	link := backend.GenerateVlessLink(user)
+	qrAscii, err := backend.GenerateQRCodeAscii(link)
 	if err != nil {
 		qrAscii = fmt.Sprintf("二维码生成失败: %v", err)
 	}
 
-	cfg := mgr.GetConfig()
+	cfg := backend.GetConfig()
 	sni := "gateway.icloud.com"
 	if len(cfg.Server.ServerNames) > 0 {
 		sni = cfg.Server.ServerNames[0]

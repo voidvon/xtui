@@ -1,9 +1,12 @@
 # XTUI (Xray VLESS Reality TUI)
 
-极简纯终端（TUI）的 **VLESS + Reality** 代理管理工具。
+极简单文件（Single Binary）、纯终端交互的 **VLESS + Reality** 代理服务与管理工具。
 
+* **分离式轻量架构**：
+  * **日常运行**：直接执行 `./xtui` 即作为代理后台服务常驻运行（极适合 systemd、tmux、后台运行或 Docker）。
+  * **配置管理**：随时执行 **`./xtui ui`**（或别名 `xtui tui`、`xtui menu`）打开全功能 TUI 界面进行可视化配置，**退出 TUI 后代理服务依然在后台不间断运行**！
 * **单文件零依赖（Single Binary）**：内置 Xray-core，不需要额外安装或运行外部 Xray 守护进程，开箱即用。
-* **全新多标签交互（Tab Navigation & Mouse Support）**：
+* **全新多标签与全鼠标交互**：
   * 支持终端**鼠标直接点击**表单、切换标签与操作按钮。
   * 顶部清晰划分 **[1] 👥 用户管理**、**[2] 🛡️ Reality 配置**、**[3] ⚙️ VLESS 服务**、**[4] ⚡ 运行状态** 四大面板。
 * **完整的参数配置能力**：
@@ -19,95 +22,112 @@
 
 ---
 
-## 界面与面板概览
+## 命令行使用方法
 
-启动后顶部提供 4 个功能面板（支持按键 `1-4` 或 `F1-F4` 切换，也可直接鼠标点击）：
+```bash
+# 1. 启动代理后台服务 (默认模式，常驻运行，适合 systemd / 后台运行)
+./xtui
+
+# 2. 打开交互式 TUI 管理面板 (别名: xtui tui, xtui menu, xtui config)
+./xtui ui
+
+# 3. 快速查看后台服务运行状态 (不进入 TUI)
+./xtui status
+
+# 4. 平滑热重启代理服务
+./xtui restart
+
+# 5. 停止后台服务
+./xtui stop
+```
+
+> **自动守护特性**：如果后台服务尚未启动，直接执行 `./xtui ui` 时会自动在后台唤醒服务，退出 TUI 界面（按 `q` 或点击退出）时代理服务依然在后台持续运作，互不干扰！
+
+---
+
+## TUI 界面功能与操作
+
+通过 `./xtui ui` 进入后，界面顶部提供 4 个功能面板（**支持鼠标直接点击**，也支持键盘数字 `1-4` 或 `F1-F4` 切换）：
 
 ### 1. `[1] 👥 用户管理 (User Management)`
 * **用户表格**：显示用户名、运行状态、上行、下行、已用总量、配额上限、实时网速 (↑/↓)、到期时间。
-* **快捷按键**：
-  * `a`：添加新用户（用户名、自定义/随机 UUID、流控模式、流量配额、有效期）
-  * `e`：**修改选中用户**（修改用户名、UUID、流控、配额上限、重置有效期、启停状态）
-  * `d`：删除选中用户
-  * `s` 或 `Enter`：展示选中用户的 **VLESS 导入链接** 与 **终端二维码**
-  * `t`：快速切换选中用户的 启用 / 停用 状态
-  * `r`：重置选中用户的已用流量为 0
+* **实体操作按钮（均可鼠标点击）**：
+  * `[ ➕ 添加用户 (a) ]`：添加新用户（用户名、自定义/随机 UUID、流控模式、流量配额、有效期）
+  * `[ ✏️ 修改选中 (e) ]`：修改当前选中用户（修改用户名、UUID、流控、配额上限、重置有效期、启停状态）
+  * `[ 📱 二维码/链接 (s) ]`：展示选中用户的 **VLESS 导入链接** 与 **终端二维码**
+  * `[ ⚡ 启用/停用 (t) ]`：快速切换选中用户的启用/停用状态
+  * `[ 🗑️ 删除用户 (d) ]`：删除选中用户
+  * `[ 🔄 流量清零 (r) ]`：重置选中用户的已用流量为 0
 
 ### 2. `[2] 🛡️ Reality 配置 (Reality Settings)`
-* **预设目标快捷选择**：Apple iCloud (`gateway.icloud.com:443`)、Microsoft (`www.microsoft.com:443`)、Amazon AWS (`aws.amazon.com:443`)、Cloudflare、Yahoo Japan 等。
-* **目标网站 (Dest)**：例如 `gateway.icloud.com:443`
-* **伪装域名 (SNI)**：支持多个域名，逗号分隔
-* **短 ID (ShortIds)**：支持多个 Hex 短 ID，逗号分隔
-* **爬虫伪装路径 (SpiderX)**：默认 `/`
-* **私钥 & 公钥 (X25519)**：展示当前密钥对，支持手动修改或点击 `[随机重新生成密钥对]`
+* **预设模板下拉选择**：Apple iCloud、Microsoft、Amazon AWS、Cloudflare、Yahoo Japan 等，选择后自动填入。
+* **目标网站 (Dest)**：例如 `gateway.icloud.com:443` 或自定义目标。
+* **伪装域名 (SNI)**：支持多个域名，英文逗号分隔。
+* **短 ID (ShortIds)**：支持多个 Hex 短 ID，英文逗号分隔。
+* **爬虫伪装路径 (SpiderX)**：默认 `/`。
+* **私钥 & 公钥 (X25519)**：展示当前密钥对，支持手动修改或点击 `[随机重新生成密钥对]`。
+* 点击 `[保存并重启生效]` 即可热重载应用。
 
 ### 3. `[3] ⚙️ VLESS 服务 (VLESS Settings)`
-* **监听端口 (Port)**：修改服务端口（默认 `4433`，可修改为 `443` 等）
-* **监听地址 (Listen IP)**：默认 `0.0.0.0`
-* **节点公网地址 (Public Host)**：可一键点击 `[自动检测公网 IP]` 获取 VPS 真实外网 IP
-* **客户端指纹 (Fingerprint)**：`chrome` / `safari` / `firefox` / `edge` / `ios`
+* **监听端口 (Port)**：修改服务端口（默认 `4433`，可修改为 `443` 等）。
+* **监听地址 (Listen IP)**：默认 `0.0.0.0`。
+* **节点公网地址 (Public Host)**：点击 `[自动检测公网 IP]` 一键抓取 VPS 真实外网 IP。
+* **客户端指纹 (Fingerprint)**：`chrome` / `safari` / `firefox` / `edge` / `ios`。
 
-### 4. `[4] ⚡ 核心状态 (Core Status)`
+### 4. `[4] ⚡ 运行状态 (Core Status)`
 * 核心运行时间、监听状态、用户总数、全站累计总流量、全站实时吞吐速率。
-* 按 `R` 一键平滑重启 Xray 内核，按 `r` 一键清零全站所有用户流量。
+* 底部提供 `[ 🔄 重启代理内核 (R) ]`、`[ 🛑 停止/启动服务 ]`、`[ 🧹 清零全站流量 ]`、`[ ⬅️ 返回用户列表 ]` 按钮。
 
 ---
 
-## 快捷键速查表
+## Linux VPS 后台运行建议 (Systemd 服务)
 
-| 操作 | 快捷键 | 说明 |
-| :--- | :--- | :--- |
-| **切换面板** | `1` / `2` / `3` / `4` (或 `F1`-`F4`) | 在四大功能面板之间无缝切换 |
-| **表单项切换** | `Tab` / `Shift+Tab` | 在配置表单各输入框之间移动焦点 |
-| **添加用户** | `a` | 弹出添加用户对话框 |
-| **修改用户** | `e` | 弹出修改当前选中用户对话框 |
-| **删除用户** | `d` | 弹出删除确认框 |
-| **二维码/链接** | `s` 或 `Enter` | 弹出节点二维码及详细参数 |
-| **切换启用/禁用** | `t` | 快速开关选中用户 |
-| **重置流量** | `r` | 清零选中用户流量 |
-| **重启代理内核** | `R` | 热重启底层 Xray 内核 |
-| **退出** | `q` | 安全退出程序（自动保存流量数据） |
+编译出来的单文件极适合配置为标准 Systemd 系统服务：
 
-*(提示：程序已启用终端鼠标支持，所有输入框、下拉框、表单按钮均可直接使用鼠标点击操作)*
+```ini
+# /etc/systemd/system/xtui.service
+[Unit]
+Description=XTUI VLESS Reality Proxy Service
+After=network.target
 
----
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/xtui
+ExecStart=/opt/xtui/xtui -c /opt/xtui/xtui.json
+Restart=always
+RestartSec=3s
+LimitNOFILE=65535
 
-## 编译与部署
-
-### 1. 本机运行
-```bash
-go run main.go
+[Install]
+WantedBy=multi-user.target
 ```
 
-### 2. 编译本机二进制
+配置后：
 ```bash
+# 启动并开机自启
+systemctl daemon-reload
+systemctl enable --now xtui
+
+# 需要管理时随时敲命令打开面板：
+xtui ui
+```
+
+---
+
+## 编译命令
+
+```bash
+cd /Users/yytest/Documents/projects/xtui
+
+# 本机编译
 make build
-# 生成当前操作系统架构的单文件: ./xtui
-```
+# 产物: ./xtui
 
-### 3. 交叉编译为 Linux VPS 单文件（静态链接，零依赖）
-```bash
-# 适用于绝大多数 64 位 VPS (Ubuntu / Debian / CentOS / Alpine / Arch)
+# Linux VPS 静态单文件编译 (Ubuntu / Debian / CentOS / Alpine / Arch)
 make build-linux
-# 产物：xtui-linux-amd64 (约 30MB 静态二进制，无 glibc 依赖)
+# 产物: ./xtui-linux-amd64 (约 30MB 静态二进制，无 glibc 依赖)
 
-# 适用于 ARM64 架构 VPS (如 Oracle Cloud ARM)
+# Linux ARM64 编译 (如 Oracle Cloud ARM)
 make build-linux-arm64
-# 产物：xtui-linux-arm64
-```
-
-### 4. VPS 后台长驻运行建议
-将编译出来的 `xtui-linux-amd64` 传到 VPS 服务器，结合 `tmux` 使用：
-
-```bash
-# 赋予执行权限
-chmod +x xtui-linux-amd64
-
-# 在 tmux 会话中启动
-tmux new -s xtui
-./xtui-linux-amd64
-
-# 离开后台：按 Ctrl+B 然后按 D
-# 随时重新查看/管理：
-tmux attach -t xtui
 ```

@@ -87,6 +87,12 @@ func (m *Manager) GetUserStats(email string) UserStats {
 	return m.userStats[email]
 }
 
+func (m *Manager) SetOnUpdate(fn func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.OnUpdate = fn
+}
+
 // BuildXrayConfig translates our high-level config into an Xray JSON config.
 func (m *Manager) BuildXrayConfig() ([]byte, error) {
 	now := time.Now().Unix()
