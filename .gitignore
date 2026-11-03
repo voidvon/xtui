@@ -1,0 +1,10 @@
+# Binaries
+xtui
+xtui-*
+*.exe
+
+# Configs & Temp files
+xtui.json
+xtui.json.tmp
+*.tmp
+.DS_Store
