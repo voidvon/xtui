@@ -34,6 +34,8 @@ type ServerConfig struct {
 	PrivateKey  string   `json:"private_key"`  // Reality private key (base64)
 	PublicKey   string   `json:"public_key"`   // Reality public key (base64)
 	ShortIds    []string `json:"short_ids"`    // Hex short IDs
+	SpiderX     string   `json:"spider_x"`     // Reality spiderX, default "/"
+	Fingerprint string   `json:"fingerprint"`  // uTLS fingerprint, default "chrome"
 }
 
 type Config struct {
@@ -86,6 +88,8 @@ func DefaultConfig() (*Config, error) {
 			PrivateKey:  priv,
 			PublicKey:   pub,
 			ShortIds:    []string{shortId},
+			SpiderX:     "/",
+			Fingerprint: "chrome",
 		},
 		Users: []*User{
 			{
@@ -133,6 +137,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Server.PublicHost == "" {
 		cfg.Server.PublicHost = "127.0.0.1"
+	}
+	if cfg.Server.SpiderX == "" {
+		cfg.Server.SpiderX = "/"
+	}
+	if cfg.Server.Fingerprint == "" {
+		cfg.Server.Fingerprint = "chrome"
 	}
 	return &cfg, nil
 }

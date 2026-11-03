@@ -16,6 +16,21 @@ import (
 	"xtui/pkg/keys"
 )
 
+type RealityPreset struct {
+	Name        string
+	Dest        string
+	ServerNames []string
+}
+
+var RealityPresets = []RealityPreset{
+	{Name: "Apple iCloud", Dest: "gateway.icloud.com:443", ServerNames: []string{"gateway.icloud.com"}},
+	{Name: "Microsoft", Dest: "www.microsoft.com:443", ServerNames: []string{"www.microsoft.com"}},
+	{Name: "Amazon AWS", Dest: "aws.amazon.com:443", ServerNames: []string{"aws.amazon.com"}},
+	{Name: "Cloudflare", Dest: "www.cloudflare.com:443", ServerNames: []string{"www.cloudflare.com"}},
+	{Name: "Yahoo Japan", Dest: "www.yahoo.co.jp:443", ServerNames: []string{"www.yahoo.co.jp"}},
+	{Name: "Speedtest", Dest: "c.speedtest.net:443", ServerNames: []string{"c.speedtest.net"}},
+}
+
 type UserStats struct {
 	SpeedUp   int64 // bytes per second
 	SpeedDown int64 // bytes per second
@@ -28,6 +43,7 @@ type Manager struct {
 
 	instance   *core.Instance
 	running    bool
+	startTime  time.Time
 	stopChan   chan struct{}
 
 	statsUpLast   map[string]int64
@@ -59,6 +75,12 @@ func (m *Manager) IsRunning() bool {
 	return m.running
 }
 
+func (m *Manager) GetStartTime() time.Time {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.startTime
+}
+
 func (m *Manager) GetUserStats(email string) UserStats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -71,7 +93,6 @@ func (m *Manager) BuildXrayConfig() ([]byte, error) {
 
 	var clients []map[string]interface{}
 	for _, u := range m.cfg.Users {
-		// Only active and non-exceeded users are accepted by Xray
 		if !u.Enabled {
 			continue
 		}
@@ -91,6 +112,11 @@ func (m *Manager) BuildXrayConfig() ([]byte, error) {
 			"flow":  flow,
 			"email": u.Email,
 		})
+	}
+
+	spiderX := m.cfg.Server.SpiderX
+	if spiderX == "" {
+		spiderX = "/"
 	}
 
 	configMap := map[string]interface{}{
@@ -130,6 +156,7 @@ func (m *Manager) BuildXrayConfig() ([]byte, error) {
 						"serverNames": m.cfg.Server.ServerNames,
 						"privateKey":  m.cfg.Server.PrivateKey,
 						"shortIds":    m.cfg.Server.ShortIds,
+						"spiderX":     spiderX,
 					},
 				},
 			},
@@ -170,6 +197,7 @@ func (m *Manager) Start() error {
 
 	m.instance = inst
 	m.running = true
+	m.startTime = time.Now()
 	m.stopChan = make(chan struct{})
 
 	// Reset counters mapping for fresh start
@@ -320,9 +348,9 @@ func (m *Manager) Save() error {
 	return config.SaveConfig(path, cfg)
 }
 
-// User operations
+// User CRUD Operations
 
-func (m *Manager) AddUser(email string, limitGB float64, validDays int) (*config.User, error) {
+func (m *Manager) AddUser(email string, limitGB float64, validDays int, customUUID, flow string) (*config.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -342,10 +370,19 @@ func (m *Manager) AddUser(email string, limitGB float64, validDays int) (*config
 		expiryTime = time.Now().AddDate(0, 0, validDays).Unix()
 	}
 
+	id := customUUID
+	if id == "" {
+		id = keys.GenerateUUID()
+	}
+
+	if flow == "" {
+		flow = "xtls-rprx-vision"
+	}
+
 	user := &config.User{
-		ID:         keys.GenerateUUID(),
+		ID:         id,
 		Email:      email,
-		Flow:       "xtls-rprx-vision",
+		Flow:       flow,
 		UpBytes:    0,
 		DownBytes:  0,
 		LimitBytes: limitBytes,
@@ -361,6 +398,57 @@ func (m *Manager) AddUser(email string, limitGB float64, validDays int) (*config
 		_ = m.Restart()
 	}()
 	return user, nil
+}
+
+func (m *Manager) EditUser(index int, email, uuidStr, flow string, limitGB float64, validDays int, enabled bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if index < 0 || index >= len(m.cfg.Users) {
+		return fmt.Errorf("invalid user index: %d", index)
+	}
+
+	u := m.cfg.Users[index]
+	if email != u.Email {
+		for i, other := range m.cfg.Users {
+			if i != index && other.Email == email {
+				return fmt.Errorf("user with name '%s' already exists", email)
+			}
+		}
+		m.statsUpLast[email] = m.statsUpLast[u.Email]
+		m.statsDownLast[email] = m.statsDownLast[u.Email]
+		m.userStats[email] = m.userStats[u.Email]
+		delete(m.statsUpLast, u.Email)
+		delete(m.statsDownLast, u.Email)
+		delete(m.userStats, u.Email)
+	}
+
+	u.Email = email
+	if uuidStr != "" {
+		u.ID = uuidStr
+	}
+	if flow != "" {
+		u.Flow = flow
+	}
+
+	if limitGB >= 0 {
+		u.LimitBytes = int64(limitGB * 1024 * 1024 * 1024)
+	}
+
+	if validDays > 0 {
+		u.ExpiryTime = time.Now().AddDate(0, 0, validDays).Unix()
+	} else if validDays == 0 {
+		u.ExpiryTime = 0 // permanent
+	}
+
+	u.Enabled = enabled
+
+	_ = config.SaveConfig(m.configPath, m.cfg)
+
+	go func() {
+		_ = m.Restart()
+	}()
+	return nil
 }
 
 func (m *Manager) DeleteUser(index int) error {
@@ -443,14 +531,21 @@ func (m *Manager) ResetAllTraffic() error {
 	return nil
 }
 
-func (m *Manager) UpdateServer(port int, host, dest, sni string) error {
+// Parameter Configuration Operations
+
+func (m *Manager) UpdateReality(dest string, serverNames []string, privKey, pubKey string, shortIds []string, spiderX string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.cfg.Server.Port = port
-	m.cfg.Server.PublicHost = host
 	m.cfg.Server.Dest = dest
-	m.cfg.Server.ServerNames = []string{sni}
+	m.cfg.Server.ServerNames = serverNames
+	m.cfg.Server.PrivateKey = privKey
+	m.cfg.Server.PublicKey = pubKey
+	m.cfg.Server.ShortIds = shortIds
+	if spiderX == "" {
+		spiderX = "/"
+	}
+	m.cfg.Server.SpiderX = spiderX
 
 	_ = config.SaveConfig(m.configPath, m.cfg)
 
@@ -460,13 +555,36 @@ func (m *Manager) UpdateServer(port int, host, dest, sni string) error {
 	return nil
 }
 
-func (m *Manager) RegenerateRealityKeys() error {
+func (m *Manager) UpdateVLESS(port int, listen, publicHost, fingerprint string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	priv, pub, err := keys.GenerateX25519()
+	m.cfg.Server.Port = port
+	if listen != "" {
+		m.cfg.Server.Listen = listen
+	}
+	if publicHost != "" {
+		m.cfg.Server.PublicHost = publicHost
+	}
+	if fingerprint != "" {
+		m.cfg.Server.Fingerprint = fingerprint
+	}
+
+	_ = config.SaveConfig(m.configPath, m.cfg)
+
+	go func() {
+		_ = m.Restart()
+	}()
+	return nil
+}
+
+func (m *Manager) RegenerateRealityKeys() (priv, pub string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	priv, pub, err = keys.GenerateX25519()
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	m.cfg.Server.PrivateKey = priv
 	m.cfg.Server.PublicKey = pub
@@ -477,7 +595,7 @@ func (m *Manager) RegenerateRealityKeys() error {
 	go func() {
 		_ = m.Restart()
 	}()
-	return nil
+	return priv, pub, nil
 }
 
 // GenerateVlessLink formats a standard VLESS Reality subscription link.
@@ -495,15 +613,31 @@ func (m *Manager) GenerateVlessLink(u *config.User) string {
 		shortId = m.cfg.Server.ShortIds[0]
 	}
 
+	fp := m.cfg.Server.Fingerprint
+	if fp == "" {
+		fp = "chrome"
+	}
+
+	spx := m.cfg.Server.SpiderX
+	if spx == "" {
+		spx = "/"
+	}
+
+	flow := u.Flow
+	if flow == "" {
+		flow = "xtls-rprx-vision"
+	}
+
 	query := url.Values{}
 	query.Set("type", "tcp")
 	query.Set("security", "reality")
 	query.Set("encryption", "none")
 	query.Set("pbk", m.cfg.Server.PublicKey)
-	query.Set("fp", "chrome")
+	query.Set("fp", fp)
 	query.Set("sni", sni)
 	query.Set("sid", shortId)
-	query.Set("flow", "xtls-rprx-vision")
+	query.Set("spx", spx)
+	query.Set("flow", flow)
 
 	host := m.cfg.Server.PublicHost
 	if host == "" {
