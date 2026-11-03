@@ -13,23 +13,51 @@ import (
 )
 
 type UI struct {
-	app         *tview.Application
-	rootPages   *tview.Pages
-	tabPages    *tview.Pages
-	mgr         *core.Manager
-	activeTab   int // 0: Users, 1: Reality, 2: VLESS, 3: Status
+	app       *tview.Application
+	rootPages *tview.Pages
+	tabPages  *tview.Pages
+	mgr       *core.Manager
+	activeTab int // 0: Users, 1: Reality, 2: VLESS, 3: Status
 
-	headerBar   *tview.TextView
-	table       *tview.Table
+	// Top Navigation Buttons (Clickable)
+	btnTabUsers   *tview.Button
+	btnTabReality *tview.Button
+	btnTabVless   *tview.Button
+	btnTabStatus  *tview.Button
+	btnQuit       *tview.Button
+
+	// Summary bar
+	summaryView *tview.TextView
+
+	// Tab 1: User Management Elements
+	table     *tview.Table
+	btnAdd    *tview.Button
+	btnEdit   *tview.Button
+	btnQR     *tview.Button
+	btnToggle *tview.Button
+	btnDel    *tview.Button
+	btnReset  *tview.Button
+
+	// Tab 2: Reality Form
 	realityForm *tview.Form
-	vlessForm   *tview.Form
-	statusView  *tview.TextView
-	footerBar   *tview.TextView
+
+	// Tab 3: VLESS Form
+	vlessForm *tview.Form
+
+	// Tab 4: Status Elements
+	statusView   *tview.TextView
+	btnRestart   *tview.Button
+	btnStopStart *tview.Button
+	btnResetAll  *tview.Button
+	btnBackUsers *tview.Button
+
+	// Bottom Footer
+	footerBar *tview.TextView
 }
 
 func NewUI(mgr *core.Manager) *UI {
 	app := tview.NewApplication()
-	app.EnableMouse(true) // Enable terminal mouse clicking!
+	app.EnableMouse(true) // Enable full terminal mouse interaction!
 
 	rootPages := tview.NewPages()
 	tabPages := tview.NewPages()
@@ -42,22 +70,49 @@ func NewUI(mgr *core.Manager) *UI {
 		activeTab: 0,
 	}
 
-	ui.setupViews()
-	ui.setupKeyboard()
+	ui.setupComponents()
 
-	// Main container layout
-	mainFlex := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(ui.headerBar, 4, 1, false).
-		AddItem(ui.tabPages, 0, 1, true).
-		AddItem(ui.footerBar, 2, 1, false)
+	// Top Bar: Navigation Buttons + Summary View
+	navFlex := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(ui.btnTabUsers, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(ui.btnTabReality, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(ui.btnTabVless, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(ui.btnTabStatus, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(ui.btnQuit, 0, 1, false)
+
+	topFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(navFlex, 1, 0, false).
+		AddItem(ui.summaryView, 2, 0, false)
+
+	// Main Layout
+	mainFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(topFlex, 3, 0, false).
+		AddItem(tabPages, 0, 1, true).
+		AddItem(ui.footerBar, 1, 0, false)
 
 	rootPages.AddPage("main", mainFlex, true, true)
 	app.SetRoot(rootPages, true)
 
+	ui.updateTabButtonStyles()
+	ui.renderSummary()
+	ui.renderTable()
+	ui.renderStatus()
+	ui.renderFooter()
+
+	ui.setupGlobalKeyboard()
+
 	mgr.OnUpdate = func() {
 		app.QueueUpdateDraw(func() {
-			ui.refreshCurrentView()
+			ui.renderSummary()
+			if ui.activeTab == 0 {
+				ui.renderTable()
+			} else if ui.activeTab == 3 {
+				ui.renderStatus()
+			}
 		})
 	}
 
@@ -72,9 +127,18 @@ func (u *UI) Stop() {
 	u.app.Stop()
 }
 
-func (u *UI) setupViews() {
-	// Top Header
-	u.headerBar = tview.NewTextView().
+func (u *UI) setupComponents() {
+	// Top Nav Buttons
+	u.btnTabUsers = tview.NewButton("👥 [1] 用户管理").SetSelectedFunc(func() { u.switchTab(0) })
+	u.btnTabReality = tview.NewButton("🛡️ [2] Reality配置").SetSelectedFunc(func() { u.switchTab(1) })
+	u.btnTabVless = tview.NewButton("⚙️ [3] VLESS服务").SetSelectedFunc(func() { u.switchTab(2) })
+	u.btnTabStatus = tview.NewButton("⚡ [4] 运行状态").SetSelectedFunc(func() { u.switchTab(3) })
+	u.btnQuit = tview.NewButton("❌ [q] 退出").SetSelectedFunc(func() { u.app.Stop() })
+
+	u.btnQuit.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkRed).Foreground(tcell.ColorWhite))
+
+	// Summary bar
+	u.summaryView = tview.NewTextView().
 		SetDynamicColors(true).
 		SetWrap(false)
 
@@ -83,55 +147,196 @@ func (u *UI) setupViews() {
 		SetDynamicColors(true).
 		SetWrap(false)
 
-	// Tab 1: User Table
+	// Setup Tab 1: User Management
+	u.setupUserTabView()
+
+	// Setup Tab 2: Reality Form
+	u.setupRealityForm()
+
+	// Setup Tab 3: VLESS Form
+	u.setupVlessForm()
+
+	// Setup Tab 4: Status View
+	u.setupStatusTabView()
+
+	// Register Pages
+	u.tabPages.AddPage("tab_users", u.buildUserTabFlex(), true, true)
+	u.tabPages.AddPage("tab_reality", u.realityForm, true, false)
+	u.tabPages.AddPage("tab_vless", u.vlessForm, true, false)
+	u.tabPages.AddPage("tab_status", u.buildStatusTabFlex(), true, false)
+}
+
+func (u *UI) setupUserTabView() {
 	u.table = tview.NewTable().
 		SetBorders(false).
 		SetSelectable(true, false).
 		SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorDarkSlateGray).Foreground(tcell.ColorWhite))
 
-	userFlex := tview.NewFlex().
-		SetDirection(tview.FlexRow).
+	u.table.SetSelectedFunc(func(row, column int) {
+		if row > 0 {
+			u.showSelectedQR(row - 1)
+		}
+	})
+
+	// Action buttons in User tab (Clickable)
+	u.btnAdd = tview.NewButton("➕ 添加用户 (a)").SetSelectedFunc(func() {
+		ShowAddUserModal(u.rootPages, u.mgr, func() {
+			u.renderTable()
+			u.renderSummary()
+		})
+	})
+	u.btnAdd.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkGreen).Foreground(tcell.ColorWhite))
+
+	u.btnEdit = tview.NewButton("✏️ 修改选中 (e)").SetSelectedFunc(func() {
+		idx := u.getSelectedUserIndex()
+		cfg := u.mgr.GetConfig()
+		if idx >= 0 && idx < len(cfg.Users) {
+			ShowEditUserModal(u.rootPages, u.mgr, idx, func() {
+				u.renderTable()
+				u.renderSummary()
+			})
+		}
+	})
+	u.btnEdit.SetStyle(tcell.StyleDefault.Background(tcell.ColorRoyalBlue).Foreground(tcell.ColorWhite))
+
+	u.btnQR = tview.NewButton("📱 二维码/链接 (s)").SetSelectedFunc(func() {
+		idx := u.getSelectedUserIndex()
+		u.showSelectedQR(idx)
+	})
+	u.btnQR.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkCyan).Foreground(tcell.ColorWhite))
+
+	u.btnToggle = tview.NewButton("⚡ 启用/停用 (t)").SetSelectedFunc(func() {
+		idx := u.getSelectedUserIndex()
+		cfg := u.mgr.GetConfig()
+		if idx >= 0 && idx < len(cfg.Users) {
+			_ = u.mgr.ToggleUser(idx)
+			u.renderTable()
+		}
+	})
+	u.btnToggle.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkGoldenrod).Foreground(tcell.ColorWhite))
+
+	u.btnDel = tview.NewButton("🗑️ 删除用户 (d)").SetSelectedFunc(func() {
+		idx := u.getSelectedUserIndex()
+		u.deleteSelectedUser(idx)
+	})
+	u.btnDel.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkRed).Foreground(tcell.ColorWhite))
+
+	u.btnReset = tview.NewButton("🔄 流量清零 (r)").SetSelectedFunc(func() {
+		idx := u.getSelectedUserIndex()
+		u.resetSelectedTraffic(idx)
+	})
+	u.btnReset.SetStyle(tcell.StyleDefault.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
+}
+
+func (u *UI) buildUserTabFlex() *tview.Flex {
+	actionFlex := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(u.btnAdd, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(u.btnEdit, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(u.btnQR, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(u.btnToggle, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(u.btnDel, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(u.btnReset, 0, 1, false)
+
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(actionFlex, 1, 0, false).
+		AddItem(tview.NewBox(), 1, 0, false).
 		AddItem(u.table, 0, 1, true)
+}
 
-	// Tab 2: Reality Form
-	u.setupRealityForm()
-
-	// Tab 3: VLESS Form
-	u.setupVlessForm()
-
-	// Tab 4: Status View
+func (u *UI) setupStatusTabView() {
 	u.statusView = tview.NewTextView().
 		SetDynamicColors(true).
 		SetScrollable(true).
 		SetWrap(true)
 	u.statusView.SetBorder(true).
-		SetTitle(" ⚡ 核心运行状态与管理 ").
+		SetTitle(" ⚡ 核心运行状态与统计 ").
 		SetBorderColor(tcell.ColorCadetBlue)
 
-	// Register Tab pages
-	u.tabPages.AddPage("tab_users", userFlex, true, true)
-	u.tabPages.AddPage("tab_reality", u.realityForm, true, false)
-	u.tabPages.AddPage("tab_vless", u.vlessForm, true, false)
-	u.tabPages.AddPage("tab_status", u.statusView, true, false)
+	u.btnRestart = tview.NewButton("🔄 重启代理内核 (R)").SetSelectedFunc(func() {
+		go func() {
+			_ = u.mgr.Restart()
+			u.app.QueueUpdateDraw(func() {
+				u.renderSummary()
+				u.renderStatus()
+				ShowAlertModal(u.rootPages, "成功", "代理内核已重启！")
+			})
+		}()
+	})
+	u.btnRestart.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkCyan).Foreground(tcell.ColorWhite))
 
-	u.renderHeader()
-	u.renderFooter()
-	u.renderTable()
-	u.renderStatus()
+	u.btnStopStart = tview.NewButton("🛑 停止/启动服务").SetSelectedFunc(func() {
+		go func() {
+			if u.mgr.IsRunning() {
+				_ = u.mgr.Stop()
+			} else {
+				_ = u.mgr.Start()
+			}
+			u.app.QueueUpdateDraw(func() {
+				u.renderSummary()
+				u.renderStatus()
+			})
+		}()
+	})
+	u.btnStopStart.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkGoldenrod).Foreground(tcell.ColorWhite))
+
+	u.btnResetAll = tview.NewButton("🧹 清零所有用户流量").SetSelectedFunc(func() {
+		ShowConfirmModal(u.rootPages, "确认重置", "确定要将全站所有用户的累计流量清零吗？", func() {
+			_ = u.mgr.ResetAllTraffic()
+			u.renderTable()
+			u.renderStatus()
+		})
+	})
+	u.btnResetAll.SetStyle(tcell.StyleDefault.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
+
+	u.btnBackUsers = tview.NewButton("⬅️ 返回用户列表 (1)").SetSelectedFunc(func() {
+		u.switchTab(0)
+	})
+	u.btnBackUsers.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkSlateGray).Foreground(tcell.ColorWhite))
+}
+
+func (u *UI) buildStatusTabFlex() *tview.Flex {
+	btnFlex := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(u.btnRestart, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(u.btnStopStart, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(u.btnResetAll, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(u.btnBackUsers, 0, 1, false)
+
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(u.statusView, 0, 1, true).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(btnFlex, 1, 0, false)
+}
+
+func (u *UI) getSelectedUserIndex() int {
+	row, _ := u.table.GetSelection()
+	if row <= 0 {
+		return 0
+	}
+	return row - 1
 }
 
 func (u *UI) switchTab(tabIndex int) {
 	u.activeTab = tabIndex
+	u.updateTabButtonStyles()
+
 	switch tabIndex {
 	case 0:
 		u.tabPages.SwitchToPage("tab_users")
 		u.app.SetFocus(u.table)
 	case 1:
-		u.setupRealityForm() // refresh data
+		u.setupRealityForm()
 		u.tabPages.SwitchToPage("tab_reality")
 		u.app.SetFocus(u.realityForm)
 	case 2:
-		u.setupVlessForm() // refresh data
+		u.setupVlessForm()
 		u.tabPages.SwitchToPage("tab_vless")
 		u.app.SetFocus(u.vlessForm)
 	case 3:
@@ -139,15 +344,37 @@ func (u *UI) switchTab(tabIndex int) {
 		u.tabPages.SwitchToPage("tab_status")
 		u.app.SetFocus(u.statusView)
 	}
-	u.renderHeader()
+
+	u.renderSummary()
 	u.renderFooter()
+}
+
+func (u *UI) updateTabButtonStyles() {
+	activeStyle := tcell.StyleDefault.Background(tcell.ColorYellow).Foreground(tcell.ColorBlack).Bold(true)
+	inactiveStyle := tcell.StyleDefault.Background(tcell.ColorDarkSlateGray).Foreground(tcell.ColorWhite)
+
+	u.btnTabUsers.SetStyle(inactiveStyle)
+	u.btnTabReality.SetStyle(inactiveStyle)
+	u.btnTabVless.SetStyle(inactiveStyle)
+	u.btnTabStatus.SetStyle(inactiveStyle)
+
+	switch u.activeTab {
+	case 0:
+		u.btnTabUsers.SetStyle(activeStyle)
+	case 1:
+		u.btnTabReality.SetStyle(activeStyle)
+	case 2:
+		u.btnTabVless.SetStyle(activeStyle)
+	case 3:
+		u.btnTabStatus.SetStyle(activeStyle)
+	}
 }
 
 func (u *UI) setupRealityForm() {
 	cfg := u.mgr.GetConfig()
 	form := tview.NewForm()
 	form.SetBorder(true).
-		SetTitle(" 🛡️ Reality 伪装参数配置 (Tab 2) ").
+		SetTitle(" 🛡️ Reality 伪装与安全参数配置 ").
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorDarkCyan)
 
@@ -200,7 +427,7 @@ func (u *UI) setupRealityForm() {
 		pubStr = strings.TrimSpace(text)
 	})
 
-	form.AddButton("随机重新生成密钥对 (Regen Keys)", func() {
+	form.AddButton("随机重新生成密钥对", func() {
 		newPriv, newPub, err := u.mgr.RegenerateRealityKeys()
 		if err == nil {
 			privStr = newPriv
@@ -215,7 +442,7 @@ func (u *UI) setupRealityForm() {
 		}
 	})
 
-	form.AddButton("保存并重启内核 (Save & Apply)", func() {
+	form.AddButton("保存并重启生效", func() {
 		if destStr == "" || privStr == "" || pubStr == "" {
 			ShowAlertModal(u.rootPages, "提示", "目标 Dest 和密钥对不能为空")
 			return
@@ -237,10 +464,10 @@ func (u *UI) setupRealityForm() {
 
 		_ = u.mgr.UpdateReality(destStr, cleanSNIs, privStr, pubStr, cleanSIDs, spiderXStr)
 		ShowAlertModal(u.rootPages, "成功", "Reality 参数已保存并应用！")
-		u.renderHeader()
+		u.renderSummary()
 	})
 
-	form.AddButton("返回用户列表 (Back)", func() {
+	form.AddButton("返回用户列表 (1)", func() {
 		u.switchTab(0)
 	})
 
@@ -251,7 +478,7 @@ func (u *UI) setupVlessForm() {
 	cfg := u.mgr.GetConfig()
 	form := tview.NewForm()
 	form.SetBorder(true).
-		SetTitle(" ⚙️ VLESS 服务与网络参数 (Tab 3) ").
+		SetTitle(" ⚙️ VLESS 服务与网络参数配置 ").
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorGoldenrod)
 
@@ -282,7 +509,7 @@ func (u *UI) setupVlessForm() {
 		fpStr = option
 	})
 
-	form.AddButton("自动检测公网 IP (Detect IP)", func() {
+	form.AddButton("自动检测公网 IP", func() {
 		detected := config.FetchPublicIP()
 		hostStr = detected
 		if item := form.GetFormItemByLabel("节点公网 IP/域名 (用于分享链接)"); item != nil {
@@ -290,7 +517,7 @@ func (u *UI) setupVlessForm() {
 		}
 	})
 
-	form.AddButton("保存并重启内核 (Save & Apply)", func() {
+	form.AddButton("保存并重启生效", func() {
 		var port int
 		fmt.Sscanf(portStr, "%d", &port)
 		if port <= 0 || port > 65535 {
@@ -299,10 +526,10 @@ func (u *UI) setupVlessForm() {
 		}
 		_ = u.mgr.UpdateVLESS(port, listenStr, hostStr, fpStr)
 		ShowAlertModal(u.rootPages, "成功", "VLESS 参数已保存并应用！")
-		u.renderHeader()
+		u.renderSummary()
 	})
 
-	form.AddButton("返回用户列表 (Back)", func() {
+	form.AddButton("返回用户列表 (1)", func() {
 		u.switchTab(0)
 	})
 
@@ -354,9 +581,6 @@ func (u *UI) renderStatus() {
   • 全站累计下载:    [green]%s[-]
   • 全站累计上传:    [green]%s[-]
   • 全站总计流量:    [white]%s[-]
-
-  [yellow:b]快捷管理操作:[-:-:-]
-  按 [white][R][-] 重启代理内核   按 [white][r][-] 清零所有用户流量   按 [white][1][-] 返回用户列表   按 [white][q][-] 退出程序
 `,
 		statusBadge,
 		uptimeStr,
@@ -375,153 +599,7 @@ func (u *UI) renderStatus() {
 	u.statusView.SetText(text)
 }
 
-func (u *UI) setupKeyboard() {
-	u.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		// Global tab switching with keys 1, 2, 3, 4 (when not editing an input)
-		// Or F1, F2, F3, F4
-		switch event.Key() {
-		case tcell.KeyF1:
-			u.switchTab(0)
-			return nil
-		case tcell.KeyF2:
-			u.switchTab(1)
-			return nil
-		case tcell.KeyF3:
-			u.switchTab(2)
-			return nil
-		case tcell.KeyF4:
-			u.switchTab(3)
-			return nil
-		}
-
-		// When table has focus or in tab 0
-		if u.activeTab == 0 && u.rootPages.HasPage("modal") == false {
-			row, _ := u.table.GetSelection()
-			userIndex := row - 1
-
-			switch event.Rune() {
-			case '1':
-				u.switchTab(0)
-				return nil
-			case '2':
-				u.switchTab(1)
-				return nil
-			case '3':
-				u.switchTab(2)
-				return nil
-			case '4':
-				u.switchTab(3)
-				return nil
-			case 'q', 'Q':
-				u.app.Stop()
-				return nil
-			case 'a', 'A':
-				ShowAddUserModal(u.rootPages, u.mgr, func() {
-					u.renderTable()
-					u.renderHeader()
-				})
-				return nil
-			case 'e', 'E':
-				if userIndex >= 0 && userIndex < len(u.mgr.GetConfig().Users) {
-					ShowEditUserModal(u.rootPages, u.mgr, userIndex, func() {
-						u.renderTable()
-						u.renderHeader()
-					})
-				}
-				return nil
-			case 'd', 'D':
-				u.deleteSelectedUser(userIndex)
-				return nil
-			case 's', 'S':
-				u.showSelectedQR(userIndex)
-				return nil
-			case 't', 'T':
-				if userIndex >= 0 && userIndex < len(u.mgr.GetConfig().Users) {
-					_ = u.mgr.ToggleUser(userIndex)
-					u.renderTable()
-				}
-				return nil
-			case 'r':
-				u.resetSelectedTraffic(userIndex)
-				return nil
-			case 'c', 'C':
-				u.switchTab(1) // switch to Reality config
-				return nil
-			case 'v', 'V':
-				u.switchTab(2) // switch to VLESS config
-				return nil
-			case 'R':
-				go func() {
-					_ = u.mgr.Restart()
-					u.app.QueueUpdateDraw(func() {
-						u.renderHeader()
-					})
-				}()
-				return nil
-			}
-
-			if event.Key() == tcell.KeyEnter {
-				u.showSelectedQR(userIndex)
-				return nil
-			}
-		}
-
-		if (event.Rune() == 'q' || event.Rune() == 'Q') && u.activeTab == 3 {
-			u.app.Stop()
-			return nil
-		}
-
-		return event
-	})
-}
-
-func (u *UI) showSelectedQR(userIndex int) {
-	cfg := u.mgr.GetConfig()
-	if userIndex >= 0 && userIndex < len(cfg.Users) {
-		user := cfg.Users[userIndex]
-		ShowQRCodeModal(u.rootPages, u.mgr, user)
-	}
-}
-
-func (u *UI) deleteSelectedUser(userIndex int) {
-	cfg := u.mgr.GetConfig()
-	if userIndex < 0 || userIndex >= len(cfg.Users) {
-		return
-	}
-	user := cfg.Users[userIndex]
-	ShowConfirmModal(u.rootPages, "确认删除",
-		fmt.Sprintf("确定要彻底删除用户 '%s' 吗？", user.Email),
-		func() {
-			_ = u.mgr.DeleteUser(userIndex)
-			u.renderTable()
-			u.renderHeader()
-		})
-}
-
-func (u *UI) resetSelectedTraffic(userIndex int) {
-	cfg := u.mgr.GetConfig()
-	if userIndex < 0 || userIndex >= len(cfg.Users) {
-		return
-	}
-	user := cfg.Users[userIndex]
-	ShowConfirmModal(u.rootPages, "重置流量",
-		fmt.Sprintf("确定要将用户 '%s' 的累计流量清零吗？", user.Email),
-		func() {
-			_ = u.mgr.ResetUserTraffic(userIndex)
-			u.renderTable()
-		})
-}
-
-func (u *UI) refreshCurrentView() {
-	u.renderHeader()
-	if u.activeTab == 0 {
-		u.renderTable()
-	} else if u.activeTab == 3 {
-		u.renderStatus()
-	}
-}
-
-func (u *UI) renderHeader() {
+func (u *UI) renderSummary() {
 	cfg := u.mgr.GetConfig()
 	running := u.mgr.IsRunning()
 
@@ -537,41 +615,21 @@ func (u *UI) renderHeader() {
 		totalSpeedDown += stats.SpeedDown
 	}
 
-	// Tabs representation
-	tab1 := "[gray][1] 👥 用户管理[-]"
-	tab2 := "[gray][2] 🛡️ Reality配置[-]"
-	tab3 := "[gray][3] ⚙️ VLESS服务[-]"
-	tab4 := "[gray][4] ⚡ 运行状态[-]"
+	line := fmt.Sprintf("  [teal:b]XTUI[-] %s  [gray]|[-] 端口: [yellow]%d[-]  [gray]|[-] 目标: [aqua]%s[-]  [gray]|[-] 用户: [white]%d[-]  [gray]|[-] 实时速率: ↑ [lime]%s[-]  ↓ [lime]%s[-]",
+		statusBadge, cfg.Server.Port, cfg.Server.Dest, len(cfg.Users), FormatSpeed(totalSpeedUp), FormatSpeed(totalSpeedDown))
 
-	switch u.activeTab {
-	case 0:
-		tab1 = "[black:yellow:b] [1] 👥 用户管理 [-:-:-]"
-	case 1:
-		tab2 = "[black:yellow:b] [2] 🛡️ Reality配置 [-:-:-]"
-	case 2:
-		tab3 = "[black:yellow:b] [3] ⚙️ VLESS服务 [-:-:-]"
-	case 3:
-		tab4 = "[black:yellow:b] [4] ⚡ 运行状态 [-:-:-]"
-	}
+	divider := "  " + strings.Repeat("─", 88)
 
-	line1 := fmt.Sprintf("  [teal:b]XTUI[-] %s   %s   %s   %s   %s",
-		statusBadge, tab1, tab2, tab3, tab4)
-
-	line2 := fmt.Sprintf("  [gray]端口:[-] [yellow]%d[-] [gray]|[-] [gray]目标:[-] [aqua]%s[-] [gray]|[-] [gray]用户:[-] [white]%d[-] [gray]|[-] 实时网速: ↑ [lime]%s[-]  ↓ [lime]%s[-]",
-		cfg.Server.Port, cfg.Server.Dest, len(cfg.Users), FormatSpeed(totalSpeedUp), FormatSpeed(totalSpeedDown))
-
-	divider := "  " + strings.Repeat("─", 86)
-
-	u.headerBar.SetText(fmt.Sprintf("%s\n%s\n%s", line1, line2, divider))
+	u.summaryView.SetText(fmt.Sprintf("%s\n%s", line, divider))
 }
 
 func (u *UI) renderFooter() {
 	if u.activeTab == 0 {
-		u.footerBar.SetText("  [yellow][1-4][-] 切换标签  [yellow][a][-] 添加用户  [yellow][e][-] 修改用户  [yellow][d][-] 删除  [yellow][s/Enter][-] 二维码/链接  [yellow][t][-] 启用/禁用  [yellow][r][-] 清零流量  [yellow][q][-] 退出")
+		u.footerBar.SetText("  [yellow]💡 提示: 所有按钮均可直接使用鼠标点击[-]  |  [yellow][1-4][-] 切换标签  [yellow][a][-] 添加  [yellow][e][-] 修改  [yellow][s][-] 二维码  [yellow][d][-] 删除  [yellow][q][-] 退出")
 	} else if u.activeTab == 1 || u.activeTab == 2 {
-		u.footerBar.SetText("  [yellow][1-4][-] 切换标签  [yellow][Tab/Shift+Tab][-] 切换表单项  [yellow][Enter/Space][-] 选择/点击  [yellow][1][-] 返回用户列表  [yellow][q][-] 退出")
+		u.footerBar.SetText("  [yellow]💡 提示: 表单项与按钮均支持鼠标点击[-]  |  [yellow][Tab][-] 切换输入框  [yellow][1][-] 返回用户列表  [yellow][q][-] 退出")
 	} else {
-		u.footerBar.SetText("  [yellow][1-4][-] 切换标签  [yellow][R][-] 重启代理内核  [yellow][r][-] 清零所有流量  [yellow][1][-] 返回用户列表  [yellow][q][-] 退出")
+		u.footerBar.SetText("  [yellow]💡 提示: 底部按钮支持鼠标点击[-]  |  [yellow][R][-] 重启内核  [yellow][1][-] 返回用户列表  [yellow][q][-] 退出")
 	}
 }
 
@@ -624,4 +682,151 @@ func (u *UI) renderTable() {
 		}
 		u.table.Select(selectedRow, 0)
 	}
+}
+
+func (u *UI) setupGlobalKeyboard() {
+	u.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// F1 - F4 always switch tabs unconditionally
+		switch event.Key() {
+		case tcell.KeyF1:
+			u.switchTab(0)
+			return nil
+		case tcell.KeyF2:
+			u.switchTab(1)
+			return nil
+		case tcell.KeyF3:
+			u.switchTab(2)
+			return nil
+		case tcell.KeyF4:
+			u.switchTab(3)
+			return nil
+		}
+
+		// When no modal dialog is displayed
+		if !u.rootPages.HasPage("modal") && !u.rootPages.HasPage("alert") {
+			// Tab 0 (User List) or Tab 3 (Status) shortcuts
+			if u.activeTab == 0 {
+				row, _ := u.table.GetSelection()
+				userIndex := row - 1
+
+				switch event.Rune() {
+				case '1':
+					u.switchTab(0)
+					return nil
+				case '2':
+					u.switchTab(1)
+					return nil
+				case '3':
+					u.switchTab(2)
+					return nil
+				case '4':
+					u.switchTab(3)
+					return nil
+				case 'a', 'A':
+					ShowAddUserModal(u.rootPages, u.mgr, func() {
+						u.renderTable()
+						u.renderSummary()
+					})
+					return nil
+				case 'e', 'E':
+					if userIndex >= 0 && userIndex < len(u.mgr.GetConfig().Users) {
+						ShowEditUserModal(u.rootPages, u.mgr, userIndex, func() {
+							u.renderTable()
+							u.renderSummary()
+						})
+					}
+					return nil
+				case 'd', 'D':
+					u.deleteSelectedUser(userIndex)
+					return nil
+				case 's', 'S':
+					u.showSelectedQR(userIndex)
+					return nil
+				case 't', 'T':
+					if userIndex >= 0 && userIndex < len(u.mgr.GetConfig().Users) {
+						_ = u.mgr.ToggleUser(userIndex)
+						u.renderTable()
+					}
+					return nil
+				case 'r':
+					u.resetSelectedTraffic(userIndex)
+					return nil
+				case 'q', 'Q':
+					u.app.Stop()
+					return nil
+				}
+
+				if event.Key() == tcell.KeyEnter {
+					u.showSelectedQR(userIndex)
+					return nil
+				}
+			} else if u.activeTab == 3 {
+				switch event.Rune() {
+				case '1':
+					u.switchTab(0)
+					return nil
+				case '2':
+					u.switchTab(1)
+					return nil
+				case '3':
+					u.switchTab(2)
+					return nil
+				case '4':
+					u.switchTab(3)
+					return nil
+				case 'R':
+					go func() {
+						_ = u.mgr.Restart()
+						u.app.QueueUpdateDraw(func() {
+							u.renderSummary()
+							u.renderStatus()
+						})
+					}()
+					return nil
+				case 'q', 'Q':
+					u.app.Stop()
+					return nil
+				}
+			}
+		}
+
+		return event
+	})
+}
+
+func (u *UI) showSelectedQR(userIndex int) {
+	cfg := u.mgr.GetConfig()
+	if userIndex >= 0 && userIndex < len(cfg.Users) {
+		user := cfg.Users[userIndex]
+		ShowQRCodeModal(u.rootPages, u.mgr, user)
+	}
+}
+
+func (u *UI) deleteSelectedUser(userIndex int) {
+	cfg := u.mgr.GetConfig()
+	if userIndex < 0 || userIndex >= len(cfg.Users) {
+		return
+	}
+	user := cfg.Users[userIndex]
+	ShowConfirmModal(u.rootPages, "确认删除",
+		fmt.Sprintf("确定要彻底删除用户 '%s' 吗？", user.Email),
+		func() {
+			_ = u.mgr.DeleteUser(userIndex)
+			u.renderTable()
+			u.renderSummary()
+		})
+}
+
+func (u *UI) resetSelectedTraffic(userIndex int) {
+	cfg := u.mgr.GetConfig()
+	if userIndex < 0 || userIndex >= len(cfg.Users) {
+		return
+	}
+	user := cfg.Users[userIndex]
+	ShowConfirmModal(u.rootPages, "重置流量",
+		fmt.Sprintf("确定要将用户 '%s' 的累计流量清零吗？", user.Email),
+		func() {
+			_ = u.mgr.ResetUserTraffic(userIndex)
+			u.renderTable()
+		})
 }
