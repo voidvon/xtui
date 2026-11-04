@@ -6,7 +6,5 @@ xtui-*
 # Configs & Temp files
 config.json
 config.json.tmp
-xtui.json
-xtui.json.tmp
 *.tmp
 .DS_Store

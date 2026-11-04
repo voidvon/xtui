@@ -116,25 +116,14 @@ func DefaultConfig() (*Config, error) {
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		// Migration check: if config.json not found, but xtui.json exists, migrate it
-		if path == "config.json" {
-			if oldData, errOld := os.ReadFile("xtui.json"); errOld == nil {
-				_ = os.WriteFile("config.json", oldData, 0600)
-				_ = os.Remove("xtui.json")
-				data = oldData
-				err = nil
-			}
+		cfg, err := DefaultConfig()
+		if err != nil {
+			return nil, err
 		}
-		if data == nil {
-			cfg, err := DefaultConfig()
-			if err != nil {
-				return nil, err
-			}
-			if err := SaveConfig(path, cfg); err != nil {
-				return nil, err
-			}
-			return cfg, nil
+		if err := SaveConfig(path, cfg); err != nil {
+			return nil, err
 		}
+		return cfg, nil
 	} else if err != nil {
 		return nil, err
 	}
