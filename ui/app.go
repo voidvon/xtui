@@ -129,11 +129,11 @@ func (u *UI) Stop() {
 
 func (u *UI) setupComponents() {
 	// Top Nav Buttons
-	u.btnTabUsers = tview.NewButton("👥 [1] 用户管理").SetSelectedFunc(func() { u.switchTab(0) })
-	u.btnTabReality = tview.NewButton("🛡️ [2] Reality配置").SetSelectedFunc(func() { u.switchTab(1) })
-	u.btnTabVless = tview.NewButton("⚙️ [3] VLESS服务").SetSelectedFunc(func() { u.switchTab(2) })
-	u.btnTabStatus = tview.NewButton("⚡ [4] 运行状态").SetSelectedFunc(func() { u.switchTab(3) })
-	u.btnQuit = tview.NewButton("❌ [q] 退出").SetSelectedFunc(func() { u.app.Stop() })
+	u.btnTabUsers = tview.NewButton("👥 用户管理").SetSelectedFunc(func() { u.switchTab(0) })
+	u.btnTabReality = tview.NewButton("🛡️ Reality配置").SetSelectedFunc(func() { u.switchTab(1) })
+	u.btnTabVless = tview.NewButton("⚙️ VLESS服务").SetSelectedFunc(func() { u.switchTab(2) })
+	u.btnTabStatus = tview.NewButton("⚡ 运行状态").SetSelectedFunc(func() { u.switchTab(3) })
+	u.btnQuit = tview.NewButton("❌ 退出 (q)").SetSelectedFunc(func() { u.app.Stop() })
 
 	u.btnQuit.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkRed).Foreground(tcell.ColorWhite))
 
@@ -293,7 +293,7 @@ func (u *UI) setupStatusTabView() {
 	})
 	u.btnResetAll.SetStyle(tcell.StyleDefault.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
 
-	u.btnBackUsers = tview.NewButton("⬅️ 返回用户列表 (1)").SetSelectedFunc(func() {
+	u.btnBackUsers = tview.NewButton("⬅️ 返回用户列表 (Esc)").SetSelectedFunc(func() {
 		u.switchTab(0)
 	})
 	u.btnBackUsers.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkSlateGray).Foreground(tcell.ColorWhite))
@@ -444,7 +444,7 @@ func (u *UI) setupRealityForm() {
 		u.renderSummary()
 	})
 
-	form.AddButton("返回用户列表 (1)", func() {
+	form.AddButton("返回用户列表 (Esc)", func() {
 		u.switchTab(0)
 	})
 
@@ -506,7 +506,7 @@ func (u *UI) setupVlessForm() {
 		u.renderSummary()
 	})
 
-	form.AddButton("返回用户列表 (1)", func() {
+	form.AddButton("返回用户列表 (Esc)", func() {
 		u.switchTab(0)
 	})
 
@@ -602,11 +602,11 @@ func (u *UI) renderSummary() {
 
 func (u *UI) renderFooter() {
 	if u.activeTab == 0 {
-		u.footerBar.SetText("  [yellow]💡 提示: 所有按钮均可直接使用鼠标点击[-]  |  [yellow][1-4][-] 切换标签  [yellow][a][-] 添加  [yellow][e][-] 修改  [yellow][s][-] 二维码  [yellow][d][-] 删除  [yellow][q][-] 退出")
+		u.footerBar.SetText("  [yellow]💡 提示: 支持鼠标点击或快捷键[-] | [yellow][F1-F4][-] 切换面板  [yellow][a][-] 添加  [yellow][e][-] 修改  [yellow][s][-] 二维码  [yellow][c][-] Reality  [yellow][v][-] VLESS  [yellow][d][-] 删除  [yellow][q][-] 退出")
 	} else if u.activeTab == 1 || u.activeTab == 2 {
-		u.footerBar.SetText("  [yellow]💡 提示: 表单项与按钮均支持鼠标点击[-]  |  [yellow][Tab][-] 切换输入框  [yellow][1][-] 返回用户列表  [yellow][q][-] 退出")
+		u.footerBar.SetText("  [yellow]💡 提示: 表单与按钮均支持鼠标点击[-] | [yellow][Tab][-] 切换输入框  [yellow][Esc][-] 返回用户列表  [yellow][F1-F4][-] 切换面板  [yellow][q][-] 退出")
 	} else {
-		u.footerBar.SetText("  [yellow]💡 提示: 底部按钮支持鼠标点击[-]  |  [yellow][R][-] 重启内核  [yellow][1][-] 返回用户列表  [yellow][q][-] 退出")
+		u.footerBar.SetText("  [yellow]💡 提示: 底部按钮支持鼠标点击[-] | [yellow][R][-] 重启内核  [yellow][Esc][-] 返回用户列表  [yellow][F1-F4][-] 切换面板  [yellow][q][-] 退出")
 	}
 }
 
@@ -677,28 +677,24 @@ func (u *UI) setupGlobalKeyboard() {
 		case tcell.KeyF4:
 			u.switchTab(3)
 			return nil
+		case tcell.KeyEscape:
+			// If not showing a modal dialog and not on Tab 0, return to Tab 0
+			if !u.rootPages.HasPage("modal") && !u.rootPages.HasPage("alert") {
+				if u.activeTab != 0 {
+					u.switchTab(0)
+					return nil
+				}
+			}
 		}
 
 		// When no modal dialog is displayed
 		if !u.rootPages.HasPage("modal") && !u.rootPages.HasPage("alert") {
-			// Tab 0 (User List) or Tab 3 (Status) shortcuts
+			// Tab 0 (User List) shortcuts
 			if u.activeTab == 0 {
 				row, _ := u.table.GetSelection()
 				userIndex := row - 1
 
 				switch event.Rune() {
-				case '1':
-					u.switchTab(0)
-					return nil
-				case '2':
-					u.switchTab(1)
-					return nil
-				case '3':
-					u.switchTab(2)
-					return nil
-				case '4':
-					u.switchTab(3)
-					return nil
 				case 'a', 'A':
 					ShowAddUserModal(u.rootPages, u.backend, func() {
 						u.renderTable()
@@ -728,6 +724,12 @@ func (u *UI) setupGlobalKeyboard() {
 				case 'r':
 					u.resetSelectedTraffic(userIndex)
 					return nil
+				case 'c', 'C':
+					u.switchTab(1)
+					return nil
+				case 'v', 'V':
+					u.switchTab(2)
+					return nil
 				case 'q', 'Q':
 					u.app.Stop()
 					return nil
@@ -739,18 +741,6 @@ func (u *UI) setupGlobalKeyboard() {
 				}
 			} else if u.activeTab == 3 {
 				switch event.Rune() {
-				case '1':
-					u.switchTab(0)
-					return nil
-				case '2':
-					u.switchTab(1)
-					return nil
-				case '3':
-					u.switchTab(2)
-					return nil
-				case '4':
-					u.switchTab(3)
-					return nil
 				case 'R':
 					go func() {
 						_ = u.backend.Restart()
@@ -759,6 +749,13 @@ func (u *UI) setupGlobalKeyboard() {
 							u.renderStatus()
 						})
 					}()
+					return nil
+				case 'r':
+					ShowConfirmModal(u.rootPages, "确认重置", "确定要将全站所有用户的累计流量清零吗？", func() {
+						_ = u.backend.ResetAllTraffic()
+						u.renderTable()
+						u.renderStatus()
+					})
 					return nil
 				case 'q', 'Q':
 					u.app.Stop()
