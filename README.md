@@ -11,7 +11,7 @@
   * 顶部清晰划分 **[1] 👥 用户管理**、**[2] 🛡️ Reality 配置**、**[3] ⚙️ VLESS 服务**、**[4] ⚡ 运行状态** 四大面板。
 * **完整的参数配置能力**：
   * **用户管理**：添加用户、修改用户（UUID/流控/配额/到期时间）、删除用户、启用/停用、流量清零。
-  * **Reality 参数深度调优**：预设目标模板一键填入（Apple / Microsoft / AWS / Cloudflare 等）、自定义 Dest 目标网站、伪装域名 SNI 列表、短 ID (ShortIds)、爬虫伪装路径 (SpiderX)、私钥与公钥查看/手动填写/一键重新生成。
+  * **Reality 参数深度调优**：自定义 Dest 目标网站、伪装域名 SNI 列表、短 ID (ShortIds)、爬虫伪装路径 (SpiderX)、私钥与公钥查看/手动填写/一键重新生成（推荐根据 VPS 邻近网络自定义合规目标）。
   * **VLESS 服务配置**：监听端口（Port）、监听地址（Listen IP）、节点公网 IP/域名探测、uTLS 客户端指纹（Fingerprint）。
 * **实时流量监控 & 限额统计**：
   * 进程内原子计数器，精确到 Byte 的实时上传/下载速率展示。
@@ -60,8 +60,7 @@
   * `[ 🔄 流量清零 (r) ]`：重置选中用户的已用流量为 0
 
 ### 2. `[2] 🛡️ Reality 配置 (Reality Settings)`
-* **预设模板下拉选择**：Apple iCloud、Microsoft、Amazon AWS、Cloudflare、Yahoo Japan 等，选择后自动填入。
-* **目标网站 (Dest)**：例如 `gateway.icloud.com:443` 或自定义目标。
+* **目标网站 (Dest)**：例如 VPS 邻近中型合规站点 `target-domain.com:443` 或自定义目标。
 * **伪装域名 (SNI)**：支持多个域名，英文逗号分隔。
 * **短 ID (ShortIds)**：支持多个 Hex 短 ID，英文逗号分隔。
 * **爬虫伪装路径 (SpiderX)**：默认 `/`。

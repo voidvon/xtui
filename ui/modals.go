@@ -181,34 +181,6 @@ func ShowRealityConfigModal(pages *tview.Pages, backend core.Backend, onDone fun
 		spiderXStr = "/"
 	}
 
-	presetOptions := []string{
-		"自定义 (Custom)",
-		"Apple iCloud (gateway.icloud.com:443)",
-		"Microsoft (www.microsoft.com:443)",
-		"Amazon AWS (aws.amazon.com:443)",
-		"Cloudflare (www.cloudflare.com:443)",
-		"Yahoo Japan (www.yahoo.co.jp:443)",
-	}
-
-	form.AddDropDown("预设目标快捷选择", presetOptions, 0, func(option string, index int) {
-		if index > 0 && index <= len(core.RealityPresets) {
-			p := core.RealityPresets[index-1]
-			destStr = p.Dest
-			sniStr = strings.Join(p.ServerNames, ",")
-			// update fields in form if possible
-			if destItem := form.GetFormItemByLabel("目标网站 (Dest)"); destItem != nil {
-				if input, ok := destItem.(*tview.InputField); ok {
-					input.SetText(destStr)
-				}
-			}
-			if sniItem := form.GetFormItemByLabel("伪装域名 (SNI)"); sniItem != nil {
-				if input, ok := sniItem.(*tview.InputField); ok {
-					input.SetText(sniStr)
-				}
-			}
-		}
-	})
-
 	form.AddInputField("目标网站 (Dest)", destStr, 34, nil, func(text string) {
 		destStr = strings.TrimSpace(text)
 	})
@@ -274,7 +246,7 @@ func ShowRealityConfigModal(pages *tview.Pages, backend core.Backend, onDone fun
 			}
 		}
 		if len(cleanSNIs) == 0 {
-			cleanSNIs = []string{"gateway.icloud.com"}
+			cleanSNIs = []string{"www.kernel.org"}
 		}
 
 		sids := strings.Split(shortIdsStr, ",")
@@ -300,7 +272,7 @@ func ShowRealityConfigModal(pages *tview.Pages, backend core.Backend, onDone fun
 		pages.RemovePage("modal")
 	})
 
-	pages.AddPage("modal", centerModal(form, 76, 25), true, true)
+	pages.AddPage("modal", centerModal(form, 76, 21), true, true)
 }
 
 // ShowVlessConfigModal allows configuring VLESS port, IP, and fingerprint.
@@ -387,7 +359,7 @@ func ShowQRCodeModal(pages *tview.Pages, backend core.Backend, user *config.User
 	}
 
 	cfg := backend.GetConfig()
-	sni := "gateway.icloud.com"
+	sni := "www.kernel.org"
 	if len(cfg.Server.ServerNames) > 0 {
 		sni = cfg.Server.ServerNames[0]
 	}

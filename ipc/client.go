@@ -300,7 +300,7 @@ func (c *Client) GenerateVlessLink(u *config.User) string {
 	defer c.mu.RUnlock()
 
 	cfg := c.lastStatus.Config
-	sni := "gateway.icloud.com"
+	sni := "www.kernel.org"
 	if len(cfg.Server.ServerNames) > 0 {
 		sni = cfg.Server.ServerNames[0]
 	}

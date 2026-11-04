@@ -24,7 +24,7 @@ func getDefaultSockPath() string {
 }
 
 func printBanner(cfg *config.Config, sockPath string) {
-	sni := "gateway.icloud.com"
+	sni := "www.kernel.org"
 	if len(cfg.Server.ServerNames) > 0 {
 		sni = cfg.Server.ServerNames[0]
 	}

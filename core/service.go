@@ -16,21 +16,6 @@ import (
 	"xtui/pkg/keys"
 )
 
-type RealityPreset struct {
-	Name        string
-	Dest        string
-	ServerNames []string
-}
-
-var RealityPresets = []RealityPreset{
-	{Name: "Apple iCloud", Dest: "gateway.icloud.com:443", ServerNames: []string{"gateway.icloud.com"}},
-	{Name: "Microsoft", Dest: "www.microsoft.com:443", ServerNames: []string{"www.microsoft.com"}},
-	{Name: "Amazon AWS", Dest: "aws.amazon.com:443", ServerNames: []string{"aws.amazon.com"}},
-	{Name: "Cloudflare", Dest: "www.cloudflare.com:443", ServerNames: []string{"www.cloudflare.com"}},
-	{Name: "Yahoo Japan", Dest: "www.yahoo.co.jp:443", ServerNames: []string{"www.yahoo.co.jp"}},
-	{Name: "Speedtest", Dest: "c.speedtest.net:443", ServerNames: []string{"c.speedtest.net"}},
-}
-
 type UserStats struct {
 	SpeedUp   int64 // bytes per second
 	SpeedDown int64 // bytes per second
@@ -609,7 +594,7 @@ func (m *Manager) GenerateVlessLink(u *config.User) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	sni := "gateway.icloud.com"
+	sni := "www.kernel.org"
 	if len(m.cfg.Server.ServerNames) > 0 {
 		sni = m.cfg.Server.ServerNames[0]
 	}

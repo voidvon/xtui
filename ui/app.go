@@ -385,29 +385,6 @@ func (u *UI) setupRealityForm() {
 	shortIdsStr := strings.Join(cfg.Server.ShortIds, ",")
 	spiderXStr := cfg.Server.SpiderX
 
-	presetOptions := []string{
-		"选择预设模板 (自动填入Dest/SNI)",
-		"Apple iCloud (gateway.icloud.com:443)",
-		"Microsoft (www.microsoft.com:443)",
-		"Amazon AWS (aws.amazon.com:443)",
-		"Cloudflare (www.cloudflare.com:443)",
-		"Yahoo Japan (www.yahoo.co.jp:443)",
-	}
-
-	form.AddDropDown("预设目标模板", presetOptions, 0, func(option string, index int) {
-		if index > 0 && index <= len(core.RealityPresets) {
-			p := core.RealityPresets[index-1]
-			destStr = p.Dest
-			sniStr = strings.Join(p.ServerNames, ",")
-			if item := form.GetFormItemByLabel("目标网站 (Dest)"); item != nil {
-				item.(*tview.InputField).SetText(destStr)
-			}
-			if item := form.GetFormItemByLabel("伪装域名 (SNI)"); item != nil {
-				item.(*tview.InputField).SetText(sniStr)
-			}
-		}
-	})
-
 	form.AddInputField("目标网站 (Dest)", destStr, 34, nil, func(text string) {
 		destStr = strings.TrimSpace(text)
 	})
@@ -560,7 +537,7 @@ func (u *UI) renderStatus() {
 		curSpeedDown += st.SpeedDown
 	}
 
-	sni := "gateway.icloud.com"
+	sni := "www.kernel.org"
 	if len(cfg.Server.ServerNames) > 0 {
 		sni = cfg.Server.ServerNames[0]
 	}
