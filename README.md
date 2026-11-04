@@ -15,7 +15,7 @@
   * **VLESS 服务配置**：监听端口（Port）、监听地址（Listen IP）、节点公网 IP/域名探测、uTLS 客户端指纹（Fingerprint）。
 * **实时流量监控 & 限额统计**：
   * 进程内原子计数器，精确到 Byte 的实时上传/下载速率展示。
-  * 累计流量定时持久化至 `xtui.json`，服务重启后流量不丢失。
+  * 累计流量定时持久化至 `config.json`（支持带注释的 JSONC 格式），服务重启后流量不丢失。
   * 流量配额（Quota）超额与到期自动切断。
 * **一键生成移动端扫码导入**：
   * 终端直接输出 **ASCII 二维码**，手机客户端（v2rayN、Shadowrocket、Sing-box、Streisand 等）扫码秒导。
@@ -93,7 +93,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/xtui
-ExecStart=/opt/xtui/xtui -c /opt/xtui/xtui.json
+ExecStart=/opt/xtui/xtui -c /opt/xtui/config.json
 Restart=always
 RestartSec=3s
 LimitNOFILE=65535

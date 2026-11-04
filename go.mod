@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/rivo/tview v0.42.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
 	github.com/xtls/xray-core v1.260327.0
 	golang.org/x/crypto v0.49.0
 )

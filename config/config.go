@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -9,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tailscale/hujson"
 
 	"xtui/pkg/keys"
 )
@@ -29,8 +33,8 @@ type ServerConfig struct {
 	Port        int      `json:"port"`         // Listening port (default 4433)
 	Listen      string   `json:"listen"`       // Bind IP (default "0.0.0.0")
 	PublicHost  string   `json:"public_host"`  // Public IP or Domain for client config
-	Dest        string   `json:"dest"`         // Reality destination, e.g. "gateway.icloud.com:443"
-	ServerNames []string `json:"server_names"` // SNI list, e.g. ["gateway.icloud.com"]
+	Dest        string   `json:"dest"`         // Reality destination, e.g. "www.kernel.org:443"
+	ServerNames []string `json:"server_names"` // SNI list, e.g. ["www.kernel.org"]
 	PrivateKey  string   `json:"private_key"`  // Reality private key (base64)
 	PublicKey   string   `json:"public_key"`   // Reality public key (base64)
 	ShortIds    []string `json:"short_ids"`    // Hex short IDs
@@ -108,26 +112,44 @@ func DefaultConfig() (*Config, error) {
 	return cfg, nil
 }
 
-// LoadConfig loads configuration from path, or creates a default one if not exists.
+// LoadConfig loads configuration from path (supports JSON with comments), or creates a default one.
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		cfg, err := DefaultConfig()
-		if err != nil {
-			return nil, err
+		// Migration check: if config.json not found, but xtui.json exists, migrate it
+		if path == "config.json" {
+			if oldData, errOld := os.ReadFile("xtui.json"); errOld == nil {
+				_ = os.WriteFile("config.json", oldData, 0600)
+				_ = os.Remove("xtui.json")
+				data = oldData
+				err = nil
+			}
 		}
-		if err := SaveConfig(path, cfg); err != nil {
-			return nil, err
+		if data == nil {
+			cfg, err := DefaultConfig()
+			if err != nil {
+				return nil, err
+			}
+			if err := SaveConfig(path, cfg); err != nil {
+				return nil, err
+			}
+			return cfg, nil
 		}
-		return cfg, nil
 	} else if err != nil {
 		return nil, err
 	}
 
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+	// Standardize JSON with comments (HuJSON / JSONC) and trailing commas
+	stdJSON, err := hujson.Standardize(data)
+	if err != nil {
+		return nil, fmt.Errorf("配置文件 JSON 语法解析失败: %w", err)
 	}
+
+	var cfg Config
+	if err := json.Unmarshal(stdJSON, &cfg); err != nil {
+		return nil, fmt.Errorf("配置文件结构解析失败: %w", err)
+	}
+
 	// Fallback checks
 	if cfg.Server.Port <= 0 {
 		cfg.Server.Port = 4433
@@ -138,6 +160,12 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Server.PublicHost == "" {
 		cfg.Server.PublicHost = "127.0.0.1"
 	}
+	if cfg.Server.Dest == "" {
+		cfg.Server.Dest = "www.kernel.org:443"
+	}
+	if len(cfg.Server.ServerNames) == 0 {
+		cfg.Server.ServerNames = []string{"www.kernel.org"}
+	}
 	if cfg.Server.SpiderX == "" {
 		cfg.Server.SpiderX = "/"
 	}
@@ -147,7 +175,59 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// SaveConfig writes the configuration safely as indented JSON.
+// MarshalJSONC formats Config into human-friendly JSON with helpful comments.
+func MarshalJSONC(cfg *Config) []byte {
+	var buf bytes.Buffer
+	buf.WriteString("{\n")
+	buf.WriteString("  // ==========================================\n")
+	buf.WriteString("  //  XTUI 服务端与 Reality 核心网络配置\n")
+	buf.WriteString("  // ==========================================\n")
+	buf.WriteString("  \"server\": {\n")
+	buf.WriteString(fmt.Sprintf("    \"port\": %d, // 服务监听端口 (推荐 443 或 4433 等)\n", cfg.Server.Port))
+	buf.WriteString(fmt.Sprintf("    \"listen\": %q, // 监听绑定的网络地址\n", cfg.Server.Listen))
+	buf.WriteString(fmt.Sprintf("    \"public_host\": %q, // 节点公网 IP 或域名 (生成客户端分享链接时使用)\n", cfg.Server.PublicHost))
+	buf.WriteString(fmt.Sprintf("    \"dest\": %q, // Reality 伪装目标网站 (必须支持 TLS 1.3 / H2)\n", cfg.Server.Dest))
+
+	snisJSON, _ := json.Marshal(cfg.Server.ServerNames)
+	buf.WriteString(fmt.Sprintf("    \"server_names\": %s, // Reality 伪装域名 (SNI 列表)\n", string(snisJSON)))
+
+	buf.WriteString(fmt.Sprintf("    \"private_key\": %q, // Reality 私钥 (服务端严格保密)\n", cfg.Server.PrivateKey))
+	buf.WriteString(fmt.Sprintf("    \"public_key\": %q, // Reality 公钥 (用于客户端连接校验)\n", cfg.Server.PublicKey))
+
+	sidsJSON, _ := json.Marshal(cfg.Server.ShortIds)
+	buf.WriteString(fmt.Sprintf("    \"short_ids\": %s, // 8字节短 ID 列表\n", string(sidsJSON)))
+
+	buf.WriteString(fmt.Sprintf("    \"spider_x\": %q, // 爬虫伪装路径 (默认 \"/\")\n", cfg.Server.SpiderX))
+	buf.WriteString(fmt.Sprintf("    \"fingerprint\": %q // 客户端 uTLS 模拟指纹 (chrome/firefox/safari/ios)\n", cfg.Server.Fingerprint))
+	buf.WriteString("  },\n\n")
+
+	buf.WriteString("  // ==========================================\n")
+	buf.WriteString("  //  客户端用户列表与独立流量记账\n")
+	buf.WriteString("  // ==========================================\n")
+	buf.WriteString("  \"users\": [\n")
+	for i, u := range cfg.Users {
+		buf.WriteString("    {\n")
+		buf.WriteString(fmt.Sprintf("      \"id\": %q, // 用户唯一凭证 UUID (VLESS 密码)\n", u.ID))
+		buf.WriteString(fmt.Sprintf("      \"email\": %q, // 用户标识名 / 流量统计账户\n", u.Email))
+		buf.WriteString(fmt.Sprintf("      \"flow\": %q, // 流控模式 (推荐 xtls-rprx-vision)\n", u.Flow))
+		buf.WriteString(fmt.Sprintf("      \"up_bytes\": %d, // 累计已用上传流量 (字节 Byte)\n", u.UpBytes))
+		buf.WriteString(fmt.Sprintf("      \"down_bytes\": %d, // 累计已用下载流量 (字节 Byte)\n", u.DownBytes))
+		buf.WriteString(fmt.Sprintf("      \"limit_bytes\": %d, // 流量上限配额 (字节 Byte, 0 为不限制)\n", u.LimitBytes))
+		buf.WriteString(fmt.Sprintf("      \"expiry_time\": %d, // 到期时间戳 (Unix时间戳, 0 为永久有效)\n", u.ExpiryTime))
+		buf.WriteString(fmt.Sprintf("      \"enabled\": %t, // 是否启用该用户 (true/false)\n", u.Enabled))
+		buf.WriteString(fmt.Sprintf("      \"created_at\": %d // 创建时间戳\n", u.CreatedAt))
+		if i == len(cfg.Users)-1 {
+			buf.WriteString("    }\n")
+		} else {
+			buf.WriteString("    },\n")
+		}
+	}
+	buf.WriteString("  ]\n")
+	buf.WriteString("}\n")
+	return buf.Bytes()
+}
+
+// SaveConfig writes the configuration safely as human-readable JSON with comments.
 func SaveConfig(path string, cfg *Config) error {
 	cfg.mu.RLock()
 	defer cfg.mu.RUnlock()
@@ -157,10 +237,7 @@ func SaveConfig(path string, cfg *Config) error {
 		return err
 	}
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
+	data := MarshalJSONC(cfg)
 
 	tmpFile := path + ".tmp"
 	if err := os.WriteFile(tmpFile, data, 0600); err != nil {

@@ -50,7 +50,7 @@ func main() {
 	var showVersion bool
 	var isDaemonWorker bool
 
-	flag.StringVar(&configPath, "c", "xtui.json", "Path to config file")
+	flag.StringVar(&configPath, "c", "config.json", "Path to config file")
 	flag.StringVar(&sockPath, "s", getDefaultSockPath(), "Path to IPC socket file")
 	flag.BoolVar(&showVersion, "v", false, "Show version")
 	flag.BoolVar(&isDaemonWorker, "d", false, "Internal flag for background worker")
@@ -101,7 +101,7 @@ func printHelp() {
   xtui stop                停止后台代理服务
 
 选项参数:
-  -c <文件路径>            指定配置文件路径 (默认: ./xtui.json)
+  -c <文件路径>            指定配置文件路径 (默认: ./config.json)
   -s <Socket路径>          指定 IPC Socket 路径 (默认: %s)
   -v                       查看版本信息
   -h                       查看帮助
