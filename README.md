@@ -1,99 +1,99 @@
-# XTUI (Xray VLESS Reality TUI)
+# XTUI
 
-极简单文件（Single Binary）、纯终端交互的 **VLESS + Reality** 代理服务与管理工具。
+轻量、单文件的终端服务管理工具。通过命令行控制服务，通过交互面板管理用户、调整配置、查看运行状态与用量。
 
-* **分离式轻量架构**：
-  * **日常运行**：直接执行 `./xtui` 即作为代理后台服务常驻运行（极适合 systemd、tmux、后台运行或 Docker）。
-  * **配置管理**：随时执行 **`./xtui ui`**（或别名 `xtui tui`、`xtui menu`）打开全功能 TUI 界面进行可视化配置，**退出 TUI 后代理服务依然在后台不间断运行**！
-* **单文件零依赖（Single Binary）**：内置 Xray-core，不需要额外安装或运行外部 Xray 守护进程，开箱即用。
-* **全新多标签与全鼠标交互**：
-  * 支持终端**鼠标直接点击**表单、切换标签与操作按钮。
-  * 顶部清晰划分 **[1] 👥 用户管理**、**[2] 🛡️ Reality 配置**、**[3] ⚙️ VLESS 服务**、**[4] ⚡ 运行状态** 四大面板。
-* **完整的参数配置能力**：
-  * **用户管理**：添加用户、修改用户（UUID/流控/配额/到期时间）、删除用户、启用/停用、流量清零。
-  * **Reality 参数深度调优**：自定义 Dest 目标网站、伪装域名 SNI 列表、短 ID (ShortIds)、爬虫伪装路径 (SpiderX)、私钥与公钥查看/手动填写/一键重新生成（推荐根据 VPS 邻近网络自定义合规目标）。
-  * **VLESS 服务配置**：监听端口（Port）、监听地址（Listen IP）、节点公网 IP/域名探测、uTLS 客户端指纹（Fingerprint）。
-* **实时流量监控 & 限额统计**：
-  * 进程内原子计数器，精确到 Byte 的实时上传/下载速率展示。
-  * 累计流量定时持久化至 `config.json`（支持带注释的 JSONC 格式），服务重启后流量不丢失。
-  * 流量配额（Quota）超额与到期自动切断。
-* **一键生成移动端扫码导入**：
-  * 终端直接输出 **ASCII 二维码**，手机客户端（v2rayN、Shadowrocket、Sing-box、Streisand 等）扫码秒导。
+## 快速开始
 
----
+从 [Releases](https://github.com/voidvon/xtui/releases/latest) 下载适合系统架构的文件：
 
-## 命令行使用方法
+| 文件 | 平台 |
+| --- | --- |
+| `xtui-linux-amd64` | Linux x86_64 |
+| `xtui-linux-arm64` | Linux ARM64 |
+| `SHA256SUMS` | 文件校验值 |
+
+以 Linux x86_64 为例：
 
 ```bash
-# 1. 启动代理后台服务 (默认模式，常驻运行，适合 systemd / 后台运行)
-./xtui
-
-# 2. 打开交互式 TUI 管理面板 (别名: xtui tui, xtui menu, xtui config)
+mkdir -p ~/xtui && cd ~/xtui
+curl -fLO https://github.com/voidvon/xtui/releases/latest/download/xtui-linux-amd64
+curl -fLO https://github.com/voidvon/xtui/releases/latest/download/SHA256SUMS
+sha256sum --ignore-missing -c SHA256SUMS
+mv xtui-linux-amd64 xtui
+chmod +x xtui
 ./xtui ui
-
-# 3. 快速查看后台服务运行状态 (不进入 TUI)
-./xtui status
-
-# 4. 平滑热重启代理服务
-./xtui restart
-
-# 5. 停止后台服务
-./xtui stop
 ```
 
-> **自动守护特性**：如果后台服务尚未启动，直接执行 `./xtui ui` 时会自动在后台唤醒服务，退出 TUI 界面（按 `q` 或点击退出）时代理服务依然在后台持续运作，互不干扰！
+ARM64 设备将上述命令中的 `xtui-linux-amd64` 替换为 `xtui-linux-arm64`。
 
----
+首次运行会在当前目录生成 `config.json`。打开管理面板时，如服务尚未启动，会自动启动后台进程；退出面板后，服务继续运行。
 
-## TUI 界面功能与操作
+## 命令用法
 
-通过 `./xtui ui` 进入后，界面顶部提供 4 个功能面板（**支持鼠标直接点击**，也支持 `F1-F4` 切换面板，按 `Esc` 快速返回用户列表）：
+```bash
+./xtui ui          # 打开管理面板，按需启动后台服务
+./xtui status      # 查看服务状态
+./xtui restart     # 重启服务内核
+./xtui stop        # 停止服务
+./xtui             # 在当前终端持续运行服务，Ctrl+C 停止
+./xtui -v          # 查看版本
+./xtui -h          # 查看帮助
+```
 
-### 1. `[1] 👥 用户管理 (User Management)`
-* **用户表格**：显示用户名、运行状态、上行、下行、已用总量、配额上限、实时网速 (↑/↓)、到期时间。
-* **实体操作按钮（均可鼠标点击）**：
-  * `[ ➕ 添加用户 (a) ]`：添加新用户（用户名、自定义/随机 UUID、流控模式、流量配额、有效期）
-  * `[ ✏️ 修改选中 (e) ]`：修改当前选中用户（修改用户名、UUID、流控、配额上限、重置有效期、启停状态）
-  * `[ 📱 二维码/链接 (s) ]`：展示选中用户的 **VLESS 导入链接** 与 **终端二维码**
-  * `[ ⚡ 启用/停用 (t) ]`：快速切换选中用户的启用/停用状态
-  * `[ 🗑️ 删除用户 (d) ]`：删除选中用户
-  * `[ 🔄 流量清零 (r) ]`：重置选中用户的已用流量为 0
+`ui` 也可写作 `tui`、`menu` 或 `config`。
 
-### 2. `[2] 🛡️ Reality 配置 (Reality Settings)`
-* **目标网站 (Dest)**：例如 VPS 邻近中型合规站点 `target-domain.com:443` 或自定义目标。
-* **伪装域名 (SNI)**：支持多个域名，英文逗号分隔。
-* **短 ID (ShortIds)**：支持多个 Hex 短 ID，英文逗号分隔。
-* **爬虫伪装路径 (SpiderX)**：默认 `/`。
-* **私钥 & 公钥 (X25519)**：展示当前密钥对，支持手动修改或点击 `[随机重新生成密钥对]`。
-* 点击 `[保存并重启生效]` 即可热重载应用。
+### 指定配置文件
 
-### 3. `[3] ⚙️ VLESS 服务 (VLESS Settings)`
-* **监听端口 (Port)**：修改服务端口（默认 `4433`，可修改为 `443` 等）。
-* **监听地址 (Listen IP)**：默认 `0.0.0.0`。
-* **节点公网地址 (Public Host)**：点击 `[自动检测公网 IP]` 一键抓取 VPS 真实外网 IP。
-* **客户端指纹 (Fingerprint)**：`chrome` / `safari` / `firefox` / `edge` / `ios`。
+```bash
+./xtui ui -c /opt/xtui/config.json
+./xtui -c /opt/xtui/config.json
+```
 
-### 4. `[4] ⚡ 运行状态 (Core Status)`
-* 核心运行时间、监听状态、用户总数、全站累计总流量、全站实时吞吐速率。
-* 底部提供 `[ 🔄 重启代理内核 (R) ]`、`[ 🛑 停止/启动服务 ]`、`[ 🧹 清零全站流量 ]`、`[ ⬅️ 返回用户列表 ]` 按钮。
+配置支持 JSONC 注释。建议使用固定目录或绝对路径，方便重启和维护。
 
----
+### 指定管理接口
 
-## Linux VPS 后台运行建议 (Systemd 服务)
+`-s` 用于指定本地 Socket 路径，默认是系统临时目录下的 `xtui.sock`。管理同一个服务时，各命令使用相同的 Socket 路径：
 
-编译出来的单文件极适合配置为标准 Systemd 系统服务：
+```bash
+./xtui ui -c /opt/xtui/config.json -s /opt/xtui/xtui.sock
+./xtui status -s /opt/xtui/xtui.sock
+./xtui restart -s /opt/xtui/xtui.sock
+./xtui stop -s /opt/xtui/xtui.sock
+```
+
+## 管理面板
+
+支持鼠标点击、表单编辑和键盘快捷键。
+
+| 按键 | 操作 |
+| --- | --- |
+| `F1`–`F4` | 切换面板 |
+| `Tab` | 切换表单输入框 |
+| `Esc` | 返回用户列表 |
+| `a` / `e` / `d` | 在用户列表中添加 / 修改 / 删除用户 |
+| `t` | 在用户列表中启用或停用选中用户 |
+| `r` | 在用户列表中清零选中用户用量 |
+| `s` | 在用户列表中查看导入信息与二维码 |
+| `R` | 在运行状态面板中重启服务内核 |
+| `q` | 在用户列表或运行状态面板中退出，服务继续运行 |
+
+面板提供用户配额、到期时间、服务参数、实时速率和累计用量管理。用量定时保存到配置文件，重启后继续累计。
+
+## 使用 systemd
+
+将可执行文件放到 `/opt/xtui/xtui`，创建 `/etc/systemd/system/xtui.service`：
 
 ```ini
-# /etc/systemd/system/xtui.service
 [Unit]
-Description=XTUI VLESS Reality Proxy Service
+Description=XTUI Service
 After=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/opt/xtui
-ExecStart=/opt/xtui/xtui -c /opt/xtui/config.json
+ExecStart=/opt/xtui/xtui -c /opt/xtui/config.json -s /opt/xtui/xtui.sock
 Restart=always
 RestartSec=3s
 LimitNOFILE=65535
@@ -102,31 +102,31 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 ```
 
-配置后：
-```bash
-# 启动并开机自启
-systemctl daemon-reload
-systemctl enable --now xtui
+启用并管理服务：
 
-# 需要管理时随时敲命令打开面板：
-xtui ui
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now xtui
+sudo systemctl status xtui
+sudo journalctl -u xtui -f
 ```
 
----
-
-## 编译命令
+打开管理面板：
 
 ```bash
-cd /Users/yytest/Documents/projects/xtui
+sudo /opt/xtui/xtui ui -c /opt/xtui/config.json -s /opt/xtui/xtui.sock
+```
 
-# 本机编译
-make build
-# 产物: ./xtui
+交由 systemd 管理时，使用 `sudo systemctl stop xtui` 停止服务，使用 `sudo systemctl restart xtui` 重启进程。
 
-# Linux VPS 静态单文件编译 (Ubuntu / Debian / CentOS / Alpine / Arch)
-make build-linux
-# 产物: ./xtui-linux-amd64 (约 30MB 静态二进制，无 glibc 依赖)
+## 从源码构建
 
-# Linux ARM64 编译 (如 Oracle Cloud ARM)
-make build-linux-arm64
+Go 版本要求见 [go.mod](go.mod)。
+
+```bash
+git clone https://github.com/voidvon/xtui.git
+cd xtui
+make build                # 当前平台：./xtui
+make build-linux          # Linux x86_64：./xtui-linux-amd64
+make build-linux-arm64    # Linux ARM64：./xtui-linux-arm64
 ```
